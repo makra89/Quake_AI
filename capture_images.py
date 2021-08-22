@@ -9,7 +9,7 @@ import time
 # Add bots
 # \bot_pause "1"
 # \g_dropinactive 0
-
+# sv_timeout 6000
 WINDOW_MARGIN = 50
 CAPTURE_KEY_POS = 'e'
 CAPTURE_KEY_NEG = 'r'
@@ -58,7 +58,7 @@ class System:
                                        self._window_rect.bottom-self._window_rect.top))
 
     def _save_screenshot(self, path, inc):
-        self.make_screenshot().save(os.path.join(path, str(inc) + '.jpg'))
+        self.make_screenshot().save(os.path.join(path, str(inc) + '.png'))
 
     def save_pos_screenshot(self):
         self._save_screenshot(self._image_path_pos, self._curr_image_pos_inc)
