@@ -50,7 +50,7 @@ class System:
 
     def _get_latest_inc(self, path):
         images = [os.path.join(path, image) for image in os.listdir(path)]
-        return int(re.search('(?P<inc>\d+).jpg$', max(images, key=os.path.getctime)).group('inc'))
+        return int(re.search('(?P<inc>\d+).png$', max(images, key=os.path.getctime)).group('inc'))
 
     def make_screenshot(self):
         return pgui.screenshot(region=(self._window_rect.left,self._window_rect.top,
@@ -80,4 +80,4 @@ while True:
     elif keyboard.read_key() == CAPTURE_KEY_NEG:
         sys.save_neg_screenshot()
 
-    time.sleep(0.2)
+    time.sleep(0.1)
