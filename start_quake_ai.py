@@ -28,12 +28,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import argparse
 from quake_ai import QuakeAiGui
 
-parser = argparse.ArgumentParser(description='Quake AI')
-parser.add_argument('root_folder', type=str,
-                    help='path to root folder (will be created if non-existing')
-
-args = parser.parse_args()
-sys = QuakeAiGui(args.root_folder)
+quake_ai = QuakeAiGui()

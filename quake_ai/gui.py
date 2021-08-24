@@ -30,32 +30,50 @@
 
 import threading
 import tkinter as tk
+from tkinter import filedialog
 
 from quake_ai.core.system import System
 
 
 class QuakeAiGui:
 
-    def __init__(self, system_root_path):
+    def __init__(self):
 
-        self._system = System(system_root_path)
+        self._system = None
         self._running_thread = None
         self._running_task = None
 
-        root = tk.Tk()
-        tk.Label(root, text="Quake AI").pack()
+        self._root = tk.Tk(className='Quake AI')
+        self._logo = tk.PhotoImage(file='./resources/logo.png')
+        tk.Label(self._root, image=self._logo).pack()
 
-        self._status_text = tk.StringVar(root)
+        # Start frame
+        self._start_frame = tk.Frame(self._root)
+        self._start_frame.pack(side=tk.BOTTOM)
+
+        self._root_path = tk.StringVar()
+        tk.Label(self._start_frame, text='Please choose a path for the root folder', bg='white').pack()
+        tk.Button(self._start_frame, text="Choose Folder", command=self._startup_system).pack()
+
+        # Main frame
+        self._main_frame = tk.Frame(self._root)
+        self._status_text = tk.StringVar(self._main_frame)
         self._status_text.set('Idle')
-        tk.Label(root, textvariable=self._status_text).pack()
-
-        tk.Button(root, text="Capture Images for Triggerbot",
+        tk.Label(self._main_frame, textvariable=self._status_text).pack()
+        tk.Button(self._main_frame, text="Capture Images for Triggerbot",
                   command=self._run_trigger_capture_task).pack(side="left")
-
-        tk.Button(root, text="Stop",
+        tk.Button(self._main_frame, text="Stop",
                   command=self._stop_current_task).pack(side="right")
 
-        root.mainloop()
+        self._root.mainloop()
+
+    def _startup_system(self):
+
+        self._root_path.set(filedialog.askdirectory())
+        self._system = System(self._root_path.get())
+
+        self._start_frame.pack_forget()
+        self._main_frame.pack()
 
     def _run_trigger_capture_task(self):
 
@@ -75,6 +93,8 @@ class QuakeAiGui:
         self._status_text.set('Idle')
         self._running_thread = None
         self._running_task = None
+
+
 
 
 
