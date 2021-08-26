@@ -32,33 +32,36 @@ import os
 
 from quake_ai.core.trigger_bot_training import TriggerBotTrainer
 from quake_ai.utils.screen_capturing import ScreenCapturer
-from quake_ai.utils.threading import NonBlockingTask
+from quake_ai.utils.threading import NonBlockingTask, BlockingTask
 
 
 class System:
 
     def __init__(self, system_root_path):
 
-        self.system_root_path = os.path.abspath(system_root_path)
-        self.screen_capturer = ScreenCapturer()
-        self.trigger_trainer = TriggerBotTrainer(image_path=os.path.join(self.system_root_path, 'triggerbot_images'),
-                                                 screenshot_func=self.screen_capturer.make_screenshot)
+        self._system_root_path = os.path.abspath(system_root_path)
 
-        self._trigger_capture_task = NonBlockingTask(self._start_capture_images_trigger,
-                                                     self._stop_capture_images_trigger)
+        # It is important that the ScreenCapturer is initialized as first component!
+        self._screen_capturer = ScreenCapturer()
+
+        self._trigger_trainer = TriggerBotTrainer(image_path=os.path.join(self._system_root_path, 'triggerbot_images'),
+                                                  output_path=os.path.join(self._system_root_path, 'triggerbot_model'),
+                                                  image_shape=self._screen_capturer.get_image_shape(),
+                                                  screenshot_func=self._screen_capturer.make_screenshot)
+
+        self._trigger_capture_task = NonBlockingTask(self._trigger_trainer.startup_capture,
+                                                     shutdown_task=self._trigger_trainer.shutdown_capture)
+
+        self._trigger_training_task = BlockingTask(self._trigger_trainer.train_epoch,
+                                                   init_task=self._trigger_trainer.init_training,
+                                                   shutdown_task=self._trigger_trainer.shutdown_training)
 
     @property
     def trigger_capture_task(self):
         return self._trigger_capture_task
 
-    def _start_capture_images_trigger(self):
-
-        self.screen_capturer.startup()
-        self.trigger_trainer.startup()
-
-    def _stop_capture_images_trigger(self):
-
-        self.screen_capturer.shutdown()
-        self.trigger_trainer.shutdown()
+    @property
+    def trigger_training_task(self):
+        return self._trigger_training_task
 
 

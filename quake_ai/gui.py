@@ -61,9 +61,11 @@ class QuakeAiGui:
         self._status_text.set('Idle')
         tk.Label(self._main_frame, textvariable=self._status_text).pack()
         tk.Button(self._main_frame, text="Capture Images for Triggerbot",
-                  command=self._run_trigger_capture_task).pack(side="left")
+                  command=self._run_trigger_capture_task).pack(side="bottom")
+        tk.Button(self._main_frame, text="Start Training for Triggerbot",
+                  command=self._run_trigger_training_task).pack(side="bottom")
         tk.Button(self._main_frame, text="Stop",
-                  command=self._stop_current_task).pack(side="right")
+                  command=self._stop_current_task).pack(side="bottom")
 
         self._root.mainloop()
 
@@ -77,10 +79,22 @@ class QuakeAiGui:
 
     def _run_trigger_capture_task(self):
 
-        self._running_task = self._system.trigger_capture_task
-        self._running_thread = threading.Thread(target=self._running_task.start)
-        self._status_text.set('TriggerBot - Capturing')
-        self._running_thread.start()
+        if self._running_task is None and self._running_thread is None:
+
+                self._running_task = self._system.trigger_capture_task
+                self._running_task.start()
+                #self._running_thread = threading.Thread(target=self._running_task.start)
+                self._status_text.set('TriggerBot - Capturing')
+                #self._running_thread.start()
+
+    def _run_trigger_training_task(self):
+
+        if self._running_task is None and self._running_thread is None:
+
+            self._running_task = self._system.trigger_training_task
+            self._running_thread = threading.Thread(target=self._running_task.start)
+            self._status_text.set('TriggerBot - Training')
+            self._running_thread.start()
 
     def _stop_current_task(self):
 

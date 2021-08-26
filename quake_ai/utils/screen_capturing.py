@@ -30,11 +30,15 @@
 
 import pyautogui as pgui
 import win32gui
+import numpy as np
 
 
 class _WindowRect:
+    """ Utility class for defining the edges of a rectangular window """
 
     def __init__(self, rect_tuple_ltrb):
+        """ input argument defined by win32gui.GetWindowRect(process_handle) """
+
         self.left = rect_tuple_ltrb[0]
         self.top = rect_tuple_ltrb[1]
         self.right = rect_tuple_ltrb[2]
@@ -44,24 +48,35 @@ class _WindowRect:
 class ScreenCapturer:
 
     def __init__(self):
-        self._process_handle = None
-        self._process_window_rect = None
-
-    def startup(self):
+        """ Attach ScreenCapturer to the Quake Live handle (if existing)
+            and provide screenshot function
+        """
 
         self._process_handle = win32gui.FindWindow(None, "Quake Live")
         if self._process_handle == 0:
             raise RuntimeError('Cannot find Quake Live window on primary screen')
         else:
             win32gui.SetForegroundWindow(self._process_handle)
-            self._process_window_rect = _WindowRect((win32gui.GetWindowRect(self._process_handle)))
+            # Get Client rect --> this is in client coordinates
+            client_rect = _WindowRect((win32gui.GetClientRect(self._process_handle)))
 
-    def shutdown(self):
+            # Convert to screen coordinates
+            left_top_client = (client_rect.left, client_rect.top)
+            right_bottom_client = (client_rect.right, client_rect.bottom)
+            left_top_screen = win32gui.ClientToScreen(self._process_handle, left_top_client)
+            right_bottom_screen = win32gui.ClientToScreen(self._process_handle, right_bottom_client)
 
-        self._process_handle = None
-        self._process_window_rect = None
+            self._window_rect = _WindowRect((left_top_screen[0], left_top_screen[1],
+                                             right_bottom_screen[0], right_bottom_screen[1]))
+
+    def get_image_shape(self):
+        """ Returns (height, width, channels) of the screenshot image"""
+
+        return np.shape(self.make_screenshot())
 
     def make_screenshot(self):
-        return pgui.screenshot(region=(self._process_window_rect.left,self._process_window_rect.top,
-                                       self._process_window_rect.right-self._process_window_rect.left,
-                                       self._process_window_rect.bottom-self._process_window_rect.top))
+        """ Make and return screenshot of the primary screen """
+
+        return pgui.screenshot(region=(self._window_rect.left, self._window_rect.top,
+                                       self._window_rect.right-self._window_rect.left,
+                                       self._window_rect.bottom-self._window_rect.top))
