@@ -31,6 +31,7 @@
 import os
 
 from quake_ai.core.trigger_bot_training import TriggerBotTrainer
+from quake_ai.core.trigger_bot_inference import TriggerBot
 from quake_ai.utils.screen_capturing import ScreenCapturer
 from quake_ai.utils.threading import NonBlockingTask, BlockingTask
 
@@ -45,9 +46,13 @@ class System:
         self._screen_capturer = ScreenCapturer()
 
         self._trigger_trainer = TriggerBotTrainer(image_path=os.path.join(self._system_root_path, 'triggerbot_images'),
-                                                  output_path=os.path.join(self._system_root_path, 'triggerbot_model'),
+                                                  model_path=os.path.join(self._system_root_path, 'triggerbot_model'),
                                                   image_shape=self._screen_capturer.get_image_shape(),
                                                   screenshot_func=self._screen_capturer.make_screenshot)
+
+        self._trigger_inference = TriggerBot(model_path=os.path.join(self._system_root_path, 'triggerbot_model'),
+                                             image_shape=self._screen_capturer.get_image_shape(),
+                                             screenshot_func=self._screen_capturer.make_screenshot)
 
         self._trigger_capture_task = NonBlockingTask(self._trigger_trainer.startup_capture,
                                                      shutdown_task=self._trigger_trainer.shutdown_capture)
@@ -56,6 +61,10 @@ class System:
                                                    init_task=self._trigger_trainer.init_training,
                                                    shutdown_task=self._trigger_trainer.shutdown_training)
 
+        self._trigger_inference_task = BlockingTask(self._trigger_inference.run_inference,
+                                                    init_task=self._trigger_inference.init_inference,
+                                                    shutdown_task=self._trigger_inference.shutdown_inference)
+
     @property
     def trigger_capture_task(self):
         return self._trigger_capture_task
@@ -63,5 +72,9 @@ class System:
     @property
     def trigger_training_task(self):
         return self._trigger_training_task
+
+    @property
+    def trigger_inference_task(self):
+        return self._trigger_inference_task
 
 

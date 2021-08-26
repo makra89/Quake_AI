@@ -43,30 +43,67 @@ _SHUFFLE_BUFFER = 20
 
 class TriggerModel:
 
-    def __init__(self, image_shape, output_path):
+    def __init__(self, image_shape, model_root_path):
 
         self._image_shape = image_shape
-        self._output_path = output_path
-        self._model_path = os.path.join(output_path, "trigger_model.hdf5")
+        self._model_root_path = model_root_path
+        self._model_path = os.path.join(model_root_path, "trigger_model.hdf5")
+        self._model = None
+
+        self._aim_mask = AimMask()
+
+    def init_inference(self):
+
+        self._model = keras.models.load_model(self._model_path)
+
+    def predict_is_on_target(self, image):
+
+        image = self._preprocess_image(image)
+        prediction = self._model(image)
+
+        return np.argmax(prediction) == 1
+
+    def shutdown_inference(self):
+
+        self._model = None
+
+    @tf.function
+    def _preprocess_image(self, image):
+        image = tf.cast(image, tf.float32)
+        print(self._image_shape)
+        image = tf.image.crop_to_bounding_box(image, int(0.5 * (self._image_shape[0] - _CROP_SIZE)),
+                                              int(0.5 * (self._image_shape[1] - _CROP_SIZE)), _CROP_SIZE, _CROP_SIZE)
+
+        image = tf.multiply(image, self._aim_mask.mask)
+        image = (image - tf.reduce_mean(image)) / tf.math.reduce_std(image)
+
+        return image
+
+
+class TrainableTriggerModel(TriggerModel):
+
+    def __init__(self, image_shape, model_root_path):
+
+        super(TrainableTriggerModel, self).__init__(image_shape, model_root_path)
 
         self._model = self._create_trigger_model()
         self._model.compile(optimizer=keras.optimizers.Adam(lr=0.001),
-                            loss='categorical_crossentropy', metrics=['accuracy'])
+                                loss='categorical_crossentropy', metrics=['accuracy'])
         self._current_epoch = 0  # relative to initialize time
 
-        if not os.path.exists(self._output_path):
-            os.makedirs(self._output_path)
+        if not os.path.exists(self._model_root_path):
+            os.makedirs(self._model_root_path)
 
-        # Initialize all callbacks
-        self.checkpoint_callback = keras.callbacks.ModelCheckpoint(self._model_path, monitor='val_accuracy',
-                                                                         verbose=1, save_best_only=True, mode='max')
-        self._reduce_lr_callback = keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
-                                                                     patience=5, min_lr=1e-7, verbose=1)
+        # Initialize all callbacks for supervising the training process
+        self._training_callbacks = []
+        self._training_callbacks.append(keras.callbacks.ModelCheckpoint(self._model_path, monitor='val_accuracy',
+                                                                            verbose=1, save_best_only=True, mode='max'))
+        self._training_callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
+                                                                              patience=5, min_lr=1e-7, verbose=1))
 
-        logdir = os.path.join(self._output_path, "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
-        self._tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=logdir)
+        logdir = os.path.join(self._model_root_path, "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+        self._training_callbacks.append(tf.keras.callbacks.TensorBoard(log_dir=logdir))
 
-        self._aim_mask = AimMask()
         self._image_logger = ImageLogger(name='Images', logdir=logdir, max_images=2)
 
     def fit_one_epoch(self, data_train, data_test):
@@ -79,9 +116,7 @@ class TriggerModel:
             self._current_epoch = 0
 
         self._model.fit(x=data_train, validation_data=data_test, initial_epoch=self._current_epoch,
-                        epochs=1+self._current_epoch, callbacks=[self.checkpoint_callback,
-                                                                 self._reduce_lr_callback,
-                                                                 self._tensorboard_callback])
+                        epochs=1+self._current_epoch, callbacks=self._training_callbacks)
         self._current_epoch += 1
 
     def create_dataset(self, image_paths_labels, augment=True, shuffle=True):
@@ -107,17 +142,6 @@ class TriggerModel:
         dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
         return dataset
-
-    @tf.function
-    def _preprocess_image(self, image):
-        image = tf.cast(image, tf.float32)
-        image = tf.image.crop_to_bounding_box(image, int(0.5 * (self._image_shape[0] - _CROP_SIZE)),
-                                              int(0.5 * (self._image_shape[1] - _CROP_SIZE)), _CROP_SIZE, _CROP_SIZE)
-
-        image = tf.multiply(image, self._aim_mask.mask)
-        image = (image - tf.reduce_mean(image)) / tf.math.reduce_std(image)
-
-        return image
 
     @tf.function
     def _parse_function(self, image_path, label):
