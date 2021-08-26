@@ -33,11 +33,11 @@ from abc import ABC, abstractmethod
 
 class Task(ABC):
 
-    def __init__(self, task, init_task=None, shutdown_task=None):
+    def __init__(self, task, init_tasks=None, shutdown_tasks=None):
 
         self._task = task
-        self._init_task = init_task
-        self._shutdown_task = shutdown_task
+        self._init_tasks = init_tasks
+        self._shutdown_tasks = shutdown_tasks
         self._running = False
 
     @abstractmethod
@@ -51,42 +51,48 @@ class Task(ABC):
 
 class NonBlockingTask(Task):
 
-    def __init__(self, task, init_task=None, shutdown_task=None):
+    def __init__(self, task, init_tasks=None, shutdown_tasks=None):
 
-        super(NonBlockingTask, self).__init__(task, init_task, shutdown_task)
+        super(NonBlockingTask, self).__init__(task, init_tasks, shutdown_tasks)
 
     def start(self):
 
         if not self._running:
-            if self._init_task:
-                self._init_task()
+            if self._init_tasks:
+                for init_task in self._init_tasks:
+                    init_task()
             self._running = True
             self._task()
 
     def stop(self):
 
         if self._running:
-            self._shutdown_task()
+            if self._shutdown_tasks:
+                for shutdown_task in self._shutdown_tasks:
+                    shutdown_task()
             self._running = False
 
 
 class BlockingTask(Task):
 
-    def __init__(self, task, init_task=None, shutdown_task=None):
+    def __init__(self, task, init_tasks=None, shutdown_tasks=None):
 
-        super(BlockingTask, self).__init__(task, init_task, shutdown_task)
+        super(BlockingTask, self).__init__(task, init_tasks, shutdown_tasks)
 
     def start(self):
 
         if not self._running:
-            if self._init_task:
-                self._init_task()
+            if self._init_tasks:
+                for init_task in self._init_tasks:
+                    init_task()
 
             self._running = True
             while self._running:
                 self._task()
 
-            self._shutdown_task()
+            if self._shutdown_tasks:
+                for shutdown_task in self._shutdown_tasks:
+                    shutdown_task()
 
     def stop(self):
 

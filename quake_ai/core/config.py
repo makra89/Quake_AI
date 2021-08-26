@@ -28,38 +28,38 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import numpy as np
-import pyautogui as pgui
-import time
-
-from quake_ai.utils.model_helpers import TriggerModel
+import os
+import configparser
 
 
-class TriggerBot:
+class QuakeAiConfig:
 
-    def __init__(self, model_path, config, screenshot_func):
+    def __init__(self, config_root_path):
 
-        self._screenshot_func = screenshot_func
-        self._fov = (config.trigger_fov[0], config.trigger_fov[1])
-        self._model = TriggerModel(self._fov, model_path)
+        self._path = os.path.join(config_root_path, 'config.ini')
+        self._config = configparser.ConfigParser()
 
-    def init_inference(self):
+        # Try to load an existing configuration
+        try:
+            self._config.read_file(self._path)
 
-        self._model.init_inference()
+        except configparser.MissingSectionHeaderError:
+            # No config available --> create default one and write it
+            self._config = _create_default_config()
+            with open(self._path, 'w') as file:
+                self._config.write(file)
 
-    def run_inference(self):
+    @property
+    def trigger_fov(self):
 
-        screenshot = np.expand_dims(np.array(self._screenshot_func()), axis=0)
-
-        if self._model.predict_is_on_target(screenshot):
-            pgui.mouseDown();
-            time.sleep(pgui.PAUSE)
-            pgui.mouseUp();
-        else:
-            time.sleep(0.02)
-
-    def shutdown_inference(self):
-
-        self._model.shutdown_inference()
+        return int(self._config['TRIGGERBOT']['fov_height']), int(self._config['TRIGGERBOT']['fov_width'])
 
 
+def _create_default_config():
+
+    config = configparser.ConfigParser()
+
+    config['TRIGGERBOT'] = {'fov_height': '200',
+                            'fov_width': '200'}
+
+    return config

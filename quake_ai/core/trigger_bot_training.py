@@ -42,12 +42,12 @@ _CAPTURE_KEY_NEG = 'r'
 
 class TriggerBotTrainer:
 
-    def __init__(self, image_path, model_path, image_shape, screenshot_func):
+    def __init__(self, image_path, model_path, config, screenshot_func):
 
         self._image_path = image_path
-        self._image_shape = image_shape
+        self._fov = (config.trigger_fov[0], config.trigger_fov[1])
         self._screenshot_func = screenshot_func
-        self._model = TrainableTriggerModel(self._image_shape, model_path)
+        self._model = TrainableTriggerModel(self._fov, model_path)
 
         self._hook_pos = None
         self._hook_neg = None

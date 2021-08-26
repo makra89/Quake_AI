@@ -35,7 +35,6 @@ import os
 import datetime
 
 _NUM_CLASSES = 2
-_CROP_SIZE = 200
 _AIM_SIZE = 8
 _BATCH_SIZE = 5
 _SHUFFLE_BUFFER = 20
@@ -50,7 +49,7 @@ class TriggerModel:
         self._model_path = os.path.join(model_root_path, "trigger_model.hdf5")
         self._model = None
 
-        self._aim_mask = AimMask()
+        self._aim_mask = AimMask(image_shape)
 
     def init_inference(self):
 
@@ -69,11 +68,8 @@ class TriggerModel:
 
     @tf.function
     def _preprocess_image(self, image):
-        image = tf.cast(image, tf.float32)
-        print(self._image_shape)
-        image = tf.image.crop_to_bounding_box(image, int(0.5 * (self._image_shape[0] - _CROP_SIZE)),
-                                              int(0.5 * (self._image_shape[1] - _CROP_SIZE)), _CROP_SIZE, _CROP_SIZE)
 
+        image = tf.cast(image, tf.float32)
         image = tf.multiply(image, self._aim_mask.mask)
         image = (image - tf.reduce_mean(image)) / tf.math.reduce_std(image)
 
@@ -86,9 +82,9 @@ class TrainableTriggerModel(TriggerModel):
 
         super(TrainableTriggerModel, self).__init__(image_shape, model_root_path)
 
-        self._model = self._create_trigger_model()
+        self._model = self._create_trigger_model(image_shape)
         self._model.compile(optimizer=keras.optimizers.Adam(lr=0.001),
-                                loss='categorical_crossentropy', metrics=['accuracy'])
+                            loss='categorical_crossentropy', metrics=['accuracy'])
         self._current_epoch = 0  # relative to initialize time
 
         if not os.path.exists(self._model_root_path):
@@ -97,9 +93,9 @@ class TrainableTriggerModel(TriggerModel):
         # Initialize all callbacks for supervising the training process
         self._training_callbacks = []
         self._training_callbacks.append(keras.callbacks.ModelCheckpoint(self._model_path, monitor='val_accuracy',
-                                                                            verbose=1, save_best_only=True, mode='max'))
+                                                                        verbose=1, save_best_only=True, mode='max'))
         self._training_callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
-                                                                              patience=5, min_lr=1e-7, verbose=1))
+                                                                          patience=5, min_lr=1e-7, verbose=1))
 
         logdir = os.path.join(self._model_root_path, "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
         self._training_callbacks.append(tf.keras.callbacks.TensorBoard(log_dir=logdir))
@@ -162,8 +158,8 @@ class TrainableTriggerModel(TriggerModel):
 
         return image, label
 
-    def _create_trigger_model(self):
-        image_input = keras.Input(shape=(_CROP_SIZE, _CROP_SIZE, 3))
+    def _create_trigger_model(self, image_shape):
+        image_input = keras.Input(shape=(image_shape[0], image_shape[1], 3))
 
         conv = keras.layers.Conv2D(filters=16, strides=(2, 2), kernel_size=3, activation='relu')(image_input)
         conv = keras.layers.Conv2D(filters=32, strides=(2, 2), kernel_size=3, activation='relu')(conv)
@@ -181,11 +177,11 @@ class TrainableTriggerModel(TriggerModel):
 
 class AimMask:
 
-    def __init__(self):
+    def __init__(self, image_shape):
 
-        mask = np.ones((_CROP_SIZE, _CROP_SIZE, 3))
-        mask[int(0.5 * (_CROP_SIZE - _AIM_SIZE)): int(0.5 * (_CROP_SIZE - _AIM_SIZE) + _AIM_SIZE),
-             int(0.5 * (_CROP_SIZE - _AIM_SIZE)): int(0.5 * (_CROP_SIZE - _AIM_SIZE) + _AIM_SIZE), :] = 0
+        mask = np.ones((image_shape[0], image_shape[1], 3))
+        mask[int(0.5 * (image_shape[0] - _AIM_SIZE)): int(0.5 * (image_shape[0] - _AIM_SIZE) + _AIM_SIZE),
+             int(0.5 * (image_shape[1] - _AIM_SIZE)): int(0.5 * (image_shape[1] - _AIM_SIZE) + _AIM_SIZE), :] = 0
         self._tf_mask = tf.cast(tf.convert_to_tensor(mask), tf.float32)
 
     @property
