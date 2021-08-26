@@ -30,7 +30,6 @@
 
 import pyautogui as pgui
 import win32gui
-import numpy as np
 
 
 class _WindowRect:
@@ -44,13 +43,31 @@ class _WindowRect:
         self.right = rect_tuple_ltrb[2]
         self.bottom = rect_tuple_ltrb[3]
 
+    def calc_center_crop_rect(self, height, width):
+        """ Calculate the _WindowRect object that corresponds to cropping from the center of this rect """
+
+        old_height = self.bottom - self.top
+        old_width = self.right - self.left
+
+        new_top = int(0.5 * (old_height - height)) + self.top
+        new_left = int(0.5 * (old_width - width)) + self.left
+
+        return _WindowRect((new_left, new_top, new_left + width, new_top + height))
+
 
 class ScreenCapturer:
 
-    def __init__(self):
+    def __init__(self, config):
         """ Attach ScreenCapturer to the Quake Live handle (if existing)
             and provide screenshot function
         """
+
+        self._config = config
+        self._process_handle = None
+        self._window_rect = None
+        self._trigger_fov_rect = None
+
+    def startup(self):
 
         self._process_handle = win32gui.FindWindow(None, "Quake Live")
         if self._process_handle == 0:
@@ -69,14 +86,26 @@ class ScreenCapturer:
             self._window_rect = _WindowRect((left_top_screen[0], left_top_screen[1],
                                              right_bottom_screen[0], right_bottom_screen[1]))
 
-    def get_image_shape(self):
-        """ Returns (height, width, channels) of the screenshot image"""
+            trigger_fov_height = self._config.trigger_fov[0]
+            trigger_fov_width = self._config.trigger_fov[1]
+            self._trigger_fov_rect = self._window_rect.calc_center_crop_rect(trigger_fov_height,
+                                                                             trigger_fov_width)
 
-        return np.shape(self.make_screenshot())
+    def shutdown(self):
 
-    def make_screenshot(self):
-        """ Make and return screenshot of the primary screen """
+        self._process_handle = None
+        self._window_rect = None
+
+    def make_window_screenshot(self):
+        """ Make and return screenshot of the complete process window """
 
         return pgui.screenshot(region=(self._window_rect.left, self._window_rect.top,
                                        self._window_rect.right-self._window_rect.left,
                                        self._window_rect.bottom-self._window_rect.top))
+
+    def make_trigger_screenshot(self):
+        """ Make and return screenshot of the trigger bot fov """
+
+        return pgui.screenshot(region=(self._trigger_fov_rect.left, self._trigger_fov_rect.top,
+                                       self._trigger_fov_rect.right - self._trigger_fov_rect.left,
+                                       self._trigger_fov_rect.bottom - self._trigger_fov_rect.top))
