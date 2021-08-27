@@ -36,19 +36,27 @@ from quake_ai.utils.model_helpers import TriggerModel
 
 
 class TriggerBot:
+    """ Main class for trigger bot inference """
 
     def __init__(self, model_path, config, screenshot_func):
+        """ Initializes the trigger bot
+
+            :param model_path path to the trained(!) model
+            :param config configuration object
+            :param screenshot_func screenshot function reference (from ImageCapturer)
+        """
 
         self._screenshot_func = screenshot_func
         self._fov = (config.trigger_fov[0], config.trigger_fov[1])
         self._model = TriggerModel(self._fov, model_path)
 
     def init_inference(self):
+        """ Initialize the model for inference (tries to load the saved model) """
 
         self._model.init_inference()
 
     def run_inference(self):
-
+        """ Run the trigger bot for one screenshot, this will perform mouse_events! """
         screenshot = np.expand_dims(np.array(self._screenshot_func()), axis=0)
 
         if self._model.predict_is_on_target(screenshot):
@@ -59,6 +67,7 @@ class TriggerBot:
             time.sleep(0.02)
 
     def shutdown_inference(self):
+        """ Stop the inference """
 
         self._model.shutdown_inference()
 

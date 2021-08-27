@@ -36,26 +36,33 @@ import datetime
 
 _NUM_CLASSES = 2
 _AIM_SIZE = 8
-_BATCH_SIZE = 5
-_SHUFFLE_BUFFER = 20
+_BATCH_SIZE = 20
+_SHUFFLE_BUFFER = 100
 
 
 class TriggerModel:
+    """ Trigger bot model used for inference """
 
     def __init__(self, image_shape, model_root_path):
+        """ Initialize the model
+
+        :param image_shape (height,width) of used fov
+        :param model_root_path path that the model may use for its ressources
+        """
 
         self._image_shape = image_shape
         self._model_root_path = model_root_path
         self._model_path = os.path.join(model_root_path, "trigger_model.hdf5")
         self._model = None
 
-        self._aim_mask = AimMask(image_shape)
+        self._aim_mask = _AimMask(image_shape)
 
     def init_inference(self):
 
         self._model = keras.models.load_model(self._model_path)
 
     def predict_is_on_target(self, image):
+        """ Returns true if aim is on-target """
 
         image = self._preprocess_image(image)
         prediction = self._model(image)
@@ -77,8 +84,14 @@ class TriggerModel:
 
 
 class TrainableTriggerModel(TriggerModel):
+    """ Trigger bot training model, builds on top of the inference model """
 
     def __init__(self, image_shape, model_root_path):
+        """ Initialize the model
+
+        :param image_shape (height,width) of used fov
+        :param model_root_path path that the model may use for its ressources
+        """
 
         super(TrainableTriggerModel, self).__init__(image_shape, model_root_path)
 
@@ -90,7 +103,10 @@ class TrainableTriggerModel(TriggerModel):
         if not os.path.exists(self._model_root_path):
             os.makedirs(self._model_root_path)
 
-        # Initialize all callbacks for supervising the training process
+        #####################################
+        #        Training Callbacks         #
+        #####################################
+
         self._training_callbacks = []
         self._training_callbacks.append(keras.callbacks.ModelCheckpoint(self._model_path, monitor='val_accuracy',
                                                                         verbose=1, save_best_only=True, mode='max'))
@@ -103,12 +119,11 @@ class TrainableTriggerModel(TriggerModel):
         self._image_logger = ImageLogger(name='Images', logdir=logdir, max_images=2)
 
     def fit_one_epoch(self, data_train, data_test):
+        """ Fit for one epoch. Model will be reloaded if existing to keep on training """
 
         try:
-            print("Model loaded")
             self._model = keras.models.load_model(self._model_path)
-        except:
-            print("Model loading failed")
+        except (ImportError, IOError):
             self._current_epoch = 0
 
         self._model.fit(x=data_train, validation_data=data_test, initial_epoch=self._current_epoch,
@@ -116,7 +131,14 @@ class TrainableTriggerModel(TriggerModel):
         self._current_epoch += 1
 
     def create_dataset(self, image_paths_labels, augment=True, shuffle=True):
-        # This works with arrays as well
+        """ Create the a tensorflow data set which can be used for training/testing
+
+            :param image_paths_labels array of (image_path, label) tuples
+            :param augment flag whether to perform image augmentation
+            :param augment flag whether to perform shuffling
+            :returns tf.data.Dataset
+        """
+
         dataset = tf.data.Dataset.from_generator(lambda: image_paths_labels, (tf.string, tf.int32))
 
         # Maps the parser on every filepath in the array. You can set the number of parallel loaders here
@@ -141,6 +163,8 @@ class TrainableTriggerModel(TriggerModel):
 
     @tf.function
     def _parse_function(self, image_path, label):
+        """ Load an image using a path and provide the image + label """
+
         bits = tf.io.read_file(image_path)
         image = tf.image.decode_png(bits, channels=3)
         image = self._preprocess_image(image)
@@ -152,6 +176,8 @@ class TrainableTriggerModel(TriggerModel):
 
     @tf.function
     def _augment(self, image, label):
+        """ Perform image augmentation, I think we could do more here """
+
         image = tf.image.random_flip_left_right(image)
         image = tf.image.random_flip_up_down(image)
         image = tf.image.random_brightness(image, max_delta=0.2)
@@ -159,25 +185,45 @@ class TrainableTriggerModel(TriggerModel):
         return image, label
 
     def _create_trigger_model(self, image_shape):
+        """ Create the keras model itself (not compiled yet) """
+
         image_input = keras.Input(shape=(image_shape[0], image_shape[1], 3))
 
-        conv = keras.layers.Conv2D(filters=16, strides=(2, 2), kernel_size=3, activation='relu')(image_input)
-        conv = keras.layers.Conv2D(filters=32, strides=(2, 2), kernel_size=3, activation='relu')(conv)
-        pooling = keras.layers.MaxPooling2D()(conv)
-        conv = keras.layers.Conv2D(filters=64, strides=(2, 2), kernel_size=3, activation='relu')(pooling)
-        pooling = keras.layers.MaxPooling2D()(conv)
+        conv = keras.layers.Conv2D(filters=16, strides=(2, 2), kernel_size=3,
+                                   activation=None, kernel_regularizer=tf.keras.regularizers.l1(0.01))(image_input)
+        norm = keras.layers.BatchNormalization()(conv)
+        act = keras.layers.Activation(keras.activations.relu)(norm)
+        conv = keras.layers.Conv2D(filters=32, strides=(2, 2), kernel_size=3,
+                                   kernel_regularizer=tf.keras.regularizers.l1(0.01), activation=None)(act)
+        norm = keras.layers.BatchNormalization()(conv)
+        act = keras.layers.Activation(keras.activations.relu)(norm)
+        pooling = keras.layers.MaxPooling2D()(act)
+        conv = keras.layers.Conv2D(filters=64, strides=(2, 2), kernel_size=3,
+                                   kernel_regularizer=tf.keras.regularizers.l1(0.01), activation=None)(pooling)
+        norm = keras.layers.BatchNormalization()(conv)
+        act = keras.layers.Activation(keras.activations.relu)(norm)
+        pooling = keras.layers.MaxPooling2D()(act)
 
         # Dense part
         flat = keras.layers.Flatten()(pooling)
-        dense = keras.layers.Dense(units=32, activation='relu')(flat)
-        out = keras.layers.Dense(units=_NUM_CLASSES, activation='softmax')(dense)
+        dense = keras.layers.Dense(units=64, activation="relu")(flat)
+        dropout = keras.layers.Dropout(rate=0.2)(dense)
+        dense = keras.layers.Dense(units=32, activation="relu")(dropout)
+        dropout = keras.layers.Dropout(rate=0.2)(dense)
+        out = keras.layers.Dense(units=_NUM_CLASSES, activation='softmax')(dropout)
 
-        return keras.models.Model(inputs=image_input, outputs=out)
+        # Construct the model itself
+        model = keras.models.Model(inputs=image_input, outputs=out)
+        print(model.summary())
+
+        return model
 
 
-class AimMask:
+class _AimMask:
+    """ Utility class for marking the aim dot (the user has to set this!) """
 
     def __init__(self, image_shape):
+        """ Initialize mask itself, returns tensorflow tensor """
 
         mask = np.ones((image_shape[0], image_shape[1], 3))
         mask[int(0.5 * (image_shape[0] - _AIM_SIZE)): int(0.5 * (image_shape[0] - _AIM_SIZE) + _AIM_SIZE),
@@ -186,17 +232,23 @@ class AimMask:
 
     @property
     def mask(self):
+
         return self._tf_mask
 
 
 class ImageLogger:
+    """ Utility class for logging images in tensorboard """
 
     def __init__(self, name, logdir, max_images=2):
+        """ Initialize it, creates image tab named "name" in tensorboard """
+
         self.file_writer = tf.summary.create_file_writer(logdir)
         self.name = name
         self._max_images = max_images
 
     def __call__(self, image, label):
+        """ Will be performed for every batch call (but only two images will be saved) """
+
         with self.file_writer.as_default():
             tf.summary.image(self.name, image,
                              step=0,  # Always overwrite images, do not save

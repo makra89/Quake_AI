@@ -32,12 +32,21 @@ from abc import ABC, abstractmethod
 
 
 class Task(ABC):
+    """ Base class for all types of tasks """
 
-    def __init__(self, task, init_tasks=None, shutdown_tasks=None):
+    def __init__(self, main_task, init_task_list=[], shutdown_task_list=[]):
+        """ Set tasks to be done
 
-        self._task = task
-        self._init_tasks = init_tasks
-        self._shutdown_tasks = shutdown_tasks
+        :param main_task: Main tasks
+        :type main_task: function reference
+        :param init_task_list: List of tasks to be done once before the main task
+        :type init_task_list: list of function references
+        :param shutdown_task_list: List of tasks to be done once after the main task
+        :type shutdown_task_list: list of function references
+        """
+        self._main_task = main_task
+        self._init_task_list = init_task_list
+        self._shutdown_task_list = shutdown_task_list
         self._running = False
 
     @abstractmethod
@@ -50,50 +59,78 @@ class Task(ABC):
 
 
 class NonBlockingTask(Task):
+    """ This type of task should return immediately """
 
-    def __init__(self, task, init_tasks=None, shutdown_tasks=None):
+    def __init__(self, main_task, init_task_list=[], shutdown_task_list=[]):
+        """ Initialize base class
 
-        super(NonBlockingTask, self).__init__(task, init_tasks, shutdown_tasks)
+        :param main_task: Main tasks
+        :type main_task: function reference
+        :param init_task_list: List of tasks to be done once before the main task
+        :type init_task_list: list of function references
+        :param shutdown_task_list: List of tasks to be done once after the main task
+        :type shutdown_task_list: list of function references
+        """
+
+        super(NonBlockingTask, self).__init__(main_task, init_task_list, shutdown_task_list)
 
     def start(self):
+        """ Start the task """
 
         if not self._running:
-            if self._init_tasks:
-                for init_task in self._init_tasks:
-                    init_task()
+            # When state switches to running --> do init tasks once
+            for init_task in self._init_task_list:
+                init_task()
             self._running = True
-            self._task()
+            self._main_task()
 
     def stop(self):
+        """ Stop the task (since it returns immediately this is not really necessary) """
 
         if self._running:
-            if self._shutdown_tasks:
-                for shutdown_task in self._shutdown_tasks:
-                    shutdown_task()
+            # State switches from running to stopped --> do shutdown tasks
+            for shutdown_task in self._shutdown_task_list:
+                shutdown_task()
             self._running = False
 
 
 class BlockingTask(Task):
+    """ This type of task is designed to deal with long-running processes.
+        The idea is to partition every long-running process into smaller steps.
+        For example only train one epoch at a time and than do this step in a loop that
+        can be interrupted.
+    """
 
-    def __init__(self, task, init_tasks=None, shutdown_tasks=None):
+    def __init__(self, main_task, init_task_list=None, shutdown_task_list=None):
+        """ Initialize the task
 
-        super(BlockingTask, self).__init__(task, init_tasks, shutdown_tasks)
+        :param main_task: Main tasks
+        :type main_task: function reference
+        :param init_task_list: List of tasks to be done once before the main task
+        :type init_task_list: list of function references
+        :param shutdown_task_list: List of tasks to be done once after the main task
+        :type shutdown_task_list: list of function references
+        """
+
+        super(BlockingTask, self).__init__(main_task, init_task_list, shutdown_task_list)
 
     def start(self):
+        """ Start the task """
 
         if not self._running:
-            if self._init_tasks:
-                for init_task in self._init_tasks:
-                    init_task()
+            # Do init tasks once when we switch from stopped --> running
+            for init_task in self._init_task_list:
+                init_task()
 
             self._running = True
             while self._running:
-                self._task()
+                self._main_task()
 
-            if self._shutdown_tasks:
-                for shutdown_task in self._shutdown_tasks:
-                    shutdown_task()
+            # If we reach this point the main loop has been interrupted --> shutdown tasks
+            for shutdown_task in self._shutdown_task_list:
+                shutdown_task()
 
     def stop(self):
+        """ Stop the task (I think this is not really thread-safe what I am doing here """
 
         self._running = False

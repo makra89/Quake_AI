@@ -41,8 +41,16 @@ _CAPTURE_KEY_NEG = 'r'
 
 
 class TriggerBotTrainer:
+    """ Main class for training the trigger bot """
 
     def __init__(self, image_path, model_path, config, screenshot_func):
+        """ Initializes the data structure needed for training the model
+
+            :param image_path path to the training images (subfolders 'neg' and 'pos' may exist already)
+            :param model_path output path for trained model and tensorboard logs
+            :param config configuration object
+            :param screenshot_func screenshot function reference (from ImageCapturer)
+        """
 
         self._image_path = image_path
         self._fov = (config.trigger_fov[0], config.trigger_fov[1])
@@ -56,12 +64,14 @@ class TriggerBotTrainer:
         self._image_path_pos = os.path.join(os.path.abspath(image_path), 'pos')
         self._image_path_neg = os.path.join(os.path.abspath(image_path), 'neg')
 
+        # Check if paths for 'positive' images already exist
         if not os.path.exists(self._image_path_pos):
             os.makedirs(self._image_path_pos)
             self._curr_image_pos_inc = 0
         else:
             self._curr_image_pos_inc = _get_latest_inc(self._image_path_pos) + 1
 
+        # Check if paths for 'negative' images already exist
         if not os.path.exists(self._image_path_neg):
             os.makedirs(self._image_path_neg)
             self._curr_image_neg_inc = 0
@@ -72,11 +82,13 @@ class TriggerBotTrainer:
         self._test_data_set = None
 
     def startup_capture(self):
+        """ Startup capturing, hooks for keyboard keys will be placed """
 
         self._hook_pos = keyboard.on_press_key(_CAPTURE_KEY_POS, self._save_pos_screenshot_callback)
         self._hook_neg = keyboard.on_press_key(_CAPTURE_KEY_NEG, self._save_neg_screenshot_callback)
 
     def shutdown_capture(self):
+        """ Release all hooks, stop capturing """
 
         if self._hook_pos is not None:
             keyboard.unhook(self._hook_pos)
@@ -84,6 +96,7 @@ class TriggerBotTrainer:
             keyboard.unhook(self._hook_neg)
 
     def init_training(self):
+        """ Initialize training, collects image paths and creates data sets"""
 
         pos_path_labels = [(os.path.join(self._image_path_pos, image), 1) for image in os.listdir(self._image_path_pos)]
         neg_path_labels = [(os.path.join(self._image_path_neg, image), 0) for image in os.listdir(self._image_path_neg)]
@@ -95,6 +108,7 @@ class TriggerBotTrainer:
         self._test_data_set = self._model.create_dataset(paths_labels_test)
 
     def train_epoch(self):
+        """ Train for one epoch """
 
         if self._train_data_set is not None and self._train_data_set is not None:
             self._model.fit_one_epoch(self._train_data_set, self._test_data_set)
@@ -102,11 +116,14 @@ class TriggerBotTrainer:
             raise RuntimeError("[Triggerbot]: No training or test set available")
 
     def shutdown_training(self):
+        """ Shutdown training process, nothing to do here """
 
         self._train_data_set = None
         self._test_data_set = None
 
     def _save_screenshot(self, path, inc):
+        """ Save a screenshot done using the screenshot handle """
+
         image = self._screenshot_func()
         print("Captured image of shape", np.shape(image))
         print("Current positive labels:", self._curr_image_pos_inc)
@@ -115,15 +132,23 @@ class TriggerBotTrainer:
         image.save(os.path.join(path, str(inc) + '.png'))
 
     def _save_pos_screenshot_callback(self, _):
+        """ Callback for 'positive images' hook """
+
         self._save_screenshot(self._image_path_pos, self._curr_image_pos_inc)
         self._curr_image_pos_inc += 1
 
     def _save_neg_screenshot_callback(self, _):
+        """ Callback for 'negative images' hook """
+
         self._save_screenshot(self._image_path_neg, self._curr_image_neg_inc)
         self._curr_image_neg_inc += 1
 
 
 def _get_latest_inc(path):
+    """ Search through images in path and get 'oldest' one.
+        If there are missing image numbers in between, this will be wrong
+    """
+
     images = [os.path.join(path, image) for image in os.listdir(path)]
     if not images:
         return 0
