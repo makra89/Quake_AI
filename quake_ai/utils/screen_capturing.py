@@ -56,18 +56,20 @@ class _WindowRect:
 
 
 class ScreenCapturer:
+    """ Attaches to Quake Live process and provides function references for making screenshots """
 
     def __init__(self, config):
-        """ Attach ScreenCapturer to the Quake Live handle (if existing)
-            and provide screenshot function
-        """
+        """ Initialize, nothing done here since we cannot be sure that the Quake Live process exists """
 
         self._config = config
         self._process_handle = None
-        self._window_rect = None
-        self._trigger_fov_rect = None
+        self._window_rect = None  # Window of main process (without bars)
+        self._trigger_fov_rect = None  # Window for trigger bot fov
 
     def startup(self):
+        """ Attach ScreenCapturer to the Quake Live handle (if existing)
+            and provide screenshot function
+        """
 
         self._process_handle = win32gui.FindWindow(None, "Quake Live")
         if self._process_handle == 0:
@@ -86,12 +88,14 @@ class ScreenCapturer:
             self._window_rect = _WindowRect((left_top_screen[0], left_top_screen[1],
                                              right_bottom_screen[0], right_bottom_screen[1]))
 
+            # Calculate window for trigger bot fov
             trigger_fov_height = self._config.trigger_fov[0]
             trigger_fov_width = self._config.trigger_fov[1]
             self._trigger_fov_rect = self._window_rect.calc_center_crop_rect(trigger_fov_height,
                                                                              trigger_fov_width)
 
     def shutdown(self):
+        """ Is there anything to do with the process handle? """
 
         self._process_handle = None
         self._window_rect = None

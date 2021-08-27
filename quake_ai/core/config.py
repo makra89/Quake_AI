@@ -33,8 +33,12 @@ import configparser
 
 
 class QuakeAiConfig:
+    """ Configuration object for Quake AI """
 
     def __init__(self, config_root_path):
+        """ Initialize the configuration using a path.
+            If not existing a default one will be generated.
+        """
 
         self._path = os.path.join(config_root_path, 'config.ini')
         self._config = configparser.ConfigParser()
@@ -56,6 +60,7 @@ class QuakeAiConfig:
 
 
 def _create_default_config():
+    """ Creates default config """
 
     config = configparser.ConfigParser()
 

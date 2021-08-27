@@ -36,8 +36,15 @@ from quake_ai.core.system import System
 
 
 class QuakeAiGui:
+    """ GUI for Quake AI
+
+        Main internal building blocks are "tasks". Tasks will be run in a separate thread since
+        some of them might be running for a while and we don't want to disturb the GUI.
+        There may only be one task active at a time
+    """
 
     def __init__(self):
+        """ Initialize and start the main GUI system """
 
         self._system = None
         self._running_thread = None
@@ -72,6 +79,7 @@ class QuakeAiGui:
         self._root.mainloop()
 
     def _startup_system(self):
+        """ Start the internal system """
 
         self._root_path.set(filedialog.askdirectory())
         self._system = System(self._root_path.get())
@@ -80,6 +88,7 @@ class QuakeAiGui:
         self._main_frame.pack()
 
     def _run_trigger_capture_task(self):
+        """ Run image capturing task for trigger bot """
 
         if self._running_task is None and self._running_thread is None:
 
@@ -89,6 +98,7 @@ class QuakeAiGui:
             self._running_thread.start()
 
     def _run_trigger_training_task(self):
+        """ Run training task for trigger bot """
 
         if self._running_task is None and self._running_thread is None:
 
@@ -98,6 +108,7 @@ class QuakeAiGui:
             self._running_thread.start()
 
     def _run_trigger_inference_task(self):
+        """ Run the trigger bot """
 
         if self._running_task is None and self._running_thread is None:
 
@@ -107,6 +118,7 @@ class QuakeAiGui:
             self._running_thread.start()
 
     def _stop_current_task(self):
+        """ Stop the current task and join its thread """
 
         if self._running_task is not None:
             self._running_task.stop()

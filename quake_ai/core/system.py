@@ -38,11 +38,22 @@ from quake_ai.core.config import QuakeAiConfig
 
 
 class System:
+    """ Defines tasks that can be used by the QuakeAiGui
+
+        There are two types of tasks:
+        - NonBlocking: "Immediately" return
+        - Blocking: Might run for a while, example is the training process of the trigger bot
+    """
 
     def __init__(self, system_root_path):
+        """ Startup the system. Also loads tensorflow/CUDA libraries """
 
         self._system_root_path = os.path.abspath(system_root_path)
         self._config = QuakeAiConfig(self._system_root_path)
+
+        #######################################
+        #             MEMBERS                 #
+        #######################################
 
         self._screen_capturer = ScreenCapturer(self._config)
 
@@ -55,20 +66,24 @@ class System:
                                              config=self._config,
                                              screenshot_func=self._screen_capturer.make_trigger_screenshot)
 
+        #####################################
+        #             TASKS                 #
+        #####################################
+
         self._trigger_capture_task = NonBlockingTask(self._trigger_trainer.startup_capture,
-                                                     init_tasks=[self._screen_capturer.startup],
-                                                     shutdown_tasks=[self._trigger_trainer.shutdown_capture,
-                                                                     self._screen_capturer.shutdown])
+                                                     init_task_list=[self._screen_capturer.startup],
+                                                     shutdown_task_list=[self._trigger_trainer.shutdown_capture,
+                                                                         self._screen_capturer.shutdown])
 
         self._trigger_training_task = BlockingTask(self._trigger_trainer.train_epoch,
-                                                   init_tasks=[self._trigger_trainer.init_training],
-                                                   shutdown_tasks=[self._trigger_trainer.shutdown_training])
+                                                   init_task_list=[self._trigger_trainer.init_training],
+                                                   shutdown_task_list=[self._trigger_trainer.shutdown_training])
 
         self._trigger_inference_task = BlockingTask(self._trigger_inference.run_inference,
-                                                    init_tasks=[self._screen_capturer.startup,
-                                                                self._trigger_inference.init_inference],
-                                                    shutdown_tasks=[self._trigger_inference.shutdown_inference,
-                                                                    self._screen_capturer.shutdown])
+                                                    init_task_list=[self._screen_capturer.startup,
+                                                                    self._trigger_inference.init_inference],
+                                                    shutdown_task_list=[self._trigger_inference.shutdown_inference,
+                                                                        self._screen_capturer.shutdown])
 
     @property
     def trigger_capture_task(self):
