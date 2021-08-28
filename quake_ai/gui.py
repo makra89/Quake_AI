@@ -30,6 +30,7 @@
 
 import threading
 import tkinter as tk
+from tkinter import ttk
 from tkinter import filedialog
 
 from quake_ai.core.system import System
@@ -51,30 +52,54 @@ class QuakeAiGui:
         self._running_task = None
 
         self._root = tk.Tk(className='Quake AI')
+        self._root.configure(background='white')
         self._logo = tk.PhotoImage(file='./resources/logo.png')
-        tk.Label(self._root, image=self._logo).pack()
+        logo_frame = tk.Frame(self._root, bg='white')
+        tk.Label(logo_frame, image=self._logo, bd=0).pack()
+        logo_frame.pack()
 
         # Start frame
-        self._start_frame = tk.Frame(self._root)
-        self._start_frame.pack(side=tk.BOTTOM)
+        self._start_frame = tk.Frame(self._root, bg='white')
 
         self._config_path = tk.StringVar()
-        tk.Label(self._start_frame, text='Please choose a config to startup the system', bg='white').pack()
-        tk.Button(self._start_frame, text="Choose config", command=self._startup_system).pack()
+
+        tk.Label(self._start_frame, text='Quake AI needs config to startup the system. Either choose an\n '
+                                         'existing configuration file or provide a file path and a default one\n '
+                                         'will be generated.',
+                 bg='white', font=('Helvetica', 10)).pack(fill='x')
+
+        tk.Button(self._start_frame, text="Choose config", font=('Helvetica', 10),
+                  command=self._startup_system).pack(pady=10)
+        self._start_frame.pack(side=tk.BOTTOM)
 
         # Main frame
-        self._main_frame = tk.Frame(self._root)
+        self._main_frame = tk.Frame(self._root, bg='white')
+
+        status = tk.LabelFrame(self._main_frame, text="System status", font=('Helvetica', 10), bg='white')
         self._status_text = tk.StringVar(self._main_frame)
         self._status_text.set('Idle')
-        tk.Label(self._main_frame, textvariable=self._status_text).pack()
-        tk.Button(self._main_frame, text="Capture Images for Triggerbot",
-                  command=self._run_trigger_capture_task).pack(side="top")
-        tk.Button(self._main_frame, text="Start Training for Triggerbot",
-                  command=self._run_trigger_training_task).pack(side="top")
-        tk.Button(self._main_frame, text="Start Triggerbot",
-                  command=self._run_trigger_inference_task).pack(side="top")
-        tk.Button(self._main_frame, text="Stop",
-                  command=self._stop_current_task).pack(side="top")
+        tk.Label(status, textvariable=self._status_text, font=('Helvetica', 16, 'bold'), bg='white',
+                 relief=tk.SUNKEN).pack(pady=10)
+        status.pack(ipadx=154)
+
+        training = tk.LabelFrame(self._main_frame, text="Triggerbot Training", font=('Helvetica', 10), bg='white')
+        tk.Button(training, text="Capture Images for Triggerbot", font=('Helvetica', 10),
+                  command=self._run_trigger_capture_task).pack(pady=10)
+        tk.Button(training, text="Start Training for Triggerbot", font=('Helvetica', 10),
+                  command=self._run_trigger_training_task).pack(pady=10)
+        training.pack(ipadx=110)
+
+        triggerbot = tk.LabelFrame(self._main_frame, text="Triggerbot", font=('Helvetica', 10), bg='white')
+        tk.Button(triggerbot, text="Start Triggerbot", font=('Helvetica', 10),
+                  command=self._run_trigger_inference_task).pack(pady=10)
+        triggerbot.pack(ipadx=150)
+
+        aimbot = tk.LabelFrame(self._main_frame, text="Aimbot", font=('Helvetica', 10), bg='white')
+        tk.Label(aimbot, text="Coming Soon", bg='white', font=('Helvetica', 10, 'bold')).pack(pady=10)
+        aimbot.pack(ipadx=154)
+
+        tk.Button(self._main_frame, text="Stop Current Task", font=('Helvetica', 10),
+                  command=self._stop_current_task).pack(pady=10)
 
         self._root.mainloop()
 
