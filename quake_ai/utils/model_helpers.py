@@ -30,34 +30,32 @@
 
 import tensorflow as tf
 import tensorflow.keras as keras
+from tensorflow.keras import backend as bk
 import numpy as np
 import os
 import datetime
-
-_NUM_CLASSES = 2
-_AIM_SIZE = 8
-_BATCH_SIZE = 20
-_SHUFFLE_BUFFER = 100
 
 
 class TriggerModel:
     """ Trigger bot model used for inference """
 
-    def __init__(self, image_shape, model_root_path):
+    def __init__(self, config, image_shape, model_path):
         """ Initialize the model
 
+        :param config configuration object
         :param image_shape (height,width) of used fov
-        :param model_root_path path that the model may use for its ressources
+        :param model_path path to the model file
         """
 
+        self._config = config
         self._image_shape = image_shape
-        self._model_root_path = model_root_path
-        self._model_path = os.path.join(model_root_path, "trigger_model.hdf5")
-        self._model = None
+        self._model_path = model_path
 
-        self._aim_mask = _AimMask(image_shape)
+        self._model = None
+        self._aim_mask = _AimMask(self._image_shape, self._config.trigger_aim_size)
 
     def init_inference(self):
+        """ Initialize trigger bot inference"""
 
         self._model = keras.models.load_model(self._model_path)
 
@@ -86,34 +84,34 @@ class TriggerModel:
 class TrainableTriggerModel(TriggerModel):
     """ Trigger bot training model, builds on top of the inference model """
 
-    def __init__(self, image_shape, model_root_path):
+    def __init__(self, config, image_shape, model_path):
         """ Initialize the model
 
+        :param config configuration object
         :param image_shape (height,width) of used fov
-        :param model_root_path path that the model may use for its ressources
+        :param model_path path to the model file
         """
 
-        super(TrainableTriggerModel, self).__init__(image_shape, model_root_path)
+        super(TrainableTriggerModel, self).__init__(config, image_shape, model_path)
 
         self._model = self._create_trigger_model(image_shape)
-        self._model.compile(optimizer=keras.optimizers.Adam(lr=0.001),
+        self._optimizer = keras.optimizers.Adam(lr=0.001)
+        self._model.compile(optimizer=self._optimizer,
                             loss='categorical_crossentropy', metrics=['accuracy'])
         self._current_epoch = 0  # relative to initialize time
-
-        if not os.path.exists(self._model_root_path):
-            os.makedirs(self._model_root_path)
 
         #####################################
         #        Training Callbacks         #
         #####################################
 
         self._training_callbacks = []
-        self._training_callbacks.append(keras.callbacks.ModelCheckpoint(self._model_path, monitor='val_accuracy',
-                                                                        verbose=1, save_best_only=True, mode='max'))
-        self._training_callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
-                                                                          patience=5, min_lr=1e-7, verbose=1))
+        self._training_callbacks.append(keras.callbacks.ModelCheckpoint(self._model_path, monitor='val_loss',
+                                                                        verbose=1, save_best_only=True, mode='min'))
+        self._training_callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5,
+                                                                          patience=10, min_lr=1e-7, verbose=1))
 
-        logdir = os.path.join(self._model_root_path, "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+        logdir = os.path.join(os.path.dirname(self._model_path),
+                              "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
         self._training_callbacks.append(tf.keras.callbacks.TensorBoard(log_dir=logdir))
 
         self._image_logger = ImageLogger(name='Images', logdir=logdir, max_images=2)
@@ -123,19 +121,23 @@ class TrainableTriggerModel(TriggerModel):
 
         try:
             self._model = keras.models.load_model(self._model_path)
+            bk.set_value(self._model.optimizer.learning_rate,
+                         float(self._config.trigger_train_lr))
         except (ImportError, IOError):
             self._current_epoch = 0
 
         self._model.fit(x=data_train, validation_data=data_test, initial_epoch=self._current_epoch,
-                        epochs=1+self._current_epoch, callbacks=self._training_callbacks)
-        self._current_epoch += 1
+                        epochs=self._config.trigger_train_epochs+self._current_epoch,
+                        callbacks=self._training_callbacks)
+        self._current_epoch += self._config.trigger_train_epochs
+        self._config.trigger_train_lr = bk.get_value(self._model.optimizer.learning_rate)
 
     def create_dataset(self, image_paths_labels, augment=True, shuffle=True):
         """ Create the a tensorflow data set which can be used for training/testing
 
             :param image_paths_labels array of (image_path, label) tuples
             :param augment flag whether to perform image augmentation
-            :param augment flag whether to perform shuffling
+            :param shuffle flag whether to perform shuffling
             :returns tf.data.Dataset
         """
 
@@ -149,13 +151,13 @@ class TrainableTriggerModel(TriggerModel):
             dataset = dataset.map(self._augment, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         # Set batch size
-        dataset = dataset.batch(_BATCH_SIZE)
+        dataset = dataset.batch(self._config.trigger_train_batch_size)
 
         dataset = dataset.map(self._image_logger, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         # Set the number of datapoints you want to load and shuffle
         if shuffle:
-            dataset = dataset.shuffle(_SHUFFLE_BUFFER)
+            dataset = dataset.shuffle(self._config.trigger_train_shuffle_size)
 
         dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
@@ -169,8 +171,8 @@ class TrainableTriggerModel(TriggerModel):
         image = tf.image.decode_png(bits, channels=3)
         image = self._preprocess_image(image)
 
-        label = tf.one_hot(label, _NUM_CLASSES)
-        label = tf.reshape(label, (_NUM_CLASSES,))
+        label = tf.one_hot(label, 2)
+        label = tf.reshape(label, (2,))
 
         return image, label
 
@@ -189,19 +191,16 @@ class TrainableTriggerModel(TriggerModel):
 
         image_input = keras.Input(shape=(image_shape[0], image_shape[1], 3))
 
-        conv = keras.layers.Conv2D(filters=16, strides=(2, 2), kernel_size=3,
-                                   activation=None, kernel_regularizer=tf.keras.regularizers.l1(0.01))(image_input)
-        norm = keras.layers.BatchNormalization()(conv)
-        act = keras.layers.Activation(keras.activations.relu)(norm)
         conv = keras.layers.Conv2D(filters=32, strides=(2, 2), kernel_size=3,
-                                   kernel_regularizer=tf.keras.regularizers.l1(0.01), activation=None)(act)
-        norm = keras.layers.BatchNormalization()(conv)
-        act = keras.layers.Activation(keras.activations.relu)(norm)
-        pooling = keras.layers.MaxPooling2D()(act)
+                                   activation=None, kernel_regularizer=tf.keras.regularizers.l1(0.001))(image_input)
+        act = keras.layers.Activation(keras.activations.relu)(conv)
         conv = keras.layers.Conv2D(filters=64, strides=(2, 2), kernel_size=3,
-                                   kernel_regularizer=tf.keras.regularizers.l1(0.01), activation=None)(pooling)
-        norm = keras.layers.BatchNormalization()(conv)
-        act = keras.layers.Activation(keras.activations.relu)(norm)
+                                   kernel_regularizer=tf.keras.regularizers.l1(0.001), activation=None)(act)
+        act = keras.layers.Activation(keras.activations.relu)(conv)
+        pooling = keras.layers.MaxPooling2D()(act)
+        conv = keras.layers.Conv2D(filters=128, strides=(2, 2), kernel_size=3,
+                                   kernel_regularizer=tf.keras.regularizers.l1(0.001), activation=None)(pooling)
+        act = keras.layers.Activation(keras.activations.relu)(conv)
         pooling = keras.layers.MaxPooling2D()(act)
 
         # Dense part
@@ -209,8 +208,7 @@ class TrainableTriggerModel(TriggerModel):
         dense = keras.layers.Dense(units=64, activation="relu")(flat)
         dropout = keras.layers.Dropout(rate=0.2)(dense)
         dense = keras.layers.Dense(units=32, activation="relu")(dropout)
-        dropout = keras.layers.Dropout(rate=0.2)(dense)
-        out = keras.layers.Dense(units=_NUM_CLASSES, activation='softmax')(dropout)
+        out = keras.layers.Dense(units=2, activation='softmax')(dense)
 
         # Construct the model itself
         model = keras.models.Model(inputs=image_input, outputs=out)
@@ -222,12 +220,12 @@ class TrainableTriggerModel(TriggerModel):
 class _AimMask:
     """ Utility class for marking the aim dot (the user has to set this!) """
 
-    def __init__(self, image_shape):
+    def __init__(self, image_shape, aim_size):
         """ Initialize mask itself, returns tensorflow tensor """
 
         mask = np.ones((image_shape[0], image_shape[1], 3))
-        mask[int(0.5 * (image_shape[0] - _AIM_SIZE)): int(0.5 * (image_shape[0] - _AIM_SIZE) + _AIM_SIZE),
-             int(0.5 * (image_shape[1] - _AIM_SIZE)): int(0.5 * (image_shape[1] - _AIM_SIZE) + _AIM_SIZE), :] = 0
+        mask[int(0.5 * (image_shape[0] - aim_size)): int(0.5 * (image_shape[0] - aim_size) + aim_size),
+             int(0.5 * (image_shape[1] - aim_size)): int(0.5 * (image_shape[1] - aim_size) + aim_size), :] = 0
         self._tf_mask = tf.cast(tf.convert_to_tensor(mask), tf.float32)
 
     @property
