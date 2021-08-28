@@ -68,9 +68,9 @@ class TriggerBot:
         screenshot = np.expand_dims(np.array(self._screenshot_func()), axis=0)
 
         if self._model.predict_is_on_target(screenshot):
-            pgui.mouseDown();
+            pgui.mouseDown()
             time.sleep(pgui.PAUSE)
-            pgui.mouseUp();
+            pgui.mouseUp()
 
     def shutdown_inference(self):
         """ Stop the inference """
