@@ -22,6 +22,14 @@ There are a bunch of settings required in Quake Live for our glorious AI to work
 - Set the Aim size to the "dot" and the width to "16"
 - Force the enemy player model to "bones", choose skin "Bright" and set all enemy colors to green
 
+# Dependencies
+
+Most imortant packages needed:
+
+- Tensorflow/Keras (I tested with v2.2)
+- pyautogui
+- mss
+
 # Setup
 
 - Run the script start_quake_ai.py in the main folder
