@@ -1,6 +1,6 @@
 ![Logo](resources/logo.png)
 
-# Quake AI
+# Quake AI - Work in Progress!
 
 I got inspired by the work done in https://medium.com/swlh/training-a-neural-network-to-autoshoot-in-fps-games-e105f27ec1a0 and wanted to try it myself. I think games are a huge playground for computer vision and especially testing deep learning approaches. Why Quake? Simple, you have to start somewhere and you can force enemy models to be green glowing skeletons :)
 
