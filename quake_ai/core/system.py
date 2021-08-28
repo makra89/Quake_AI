@@ -28,8 +28,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
-
 from quake_ai.core.trigger_bot_training import TriggerBotTrainer
 from quake_ai.core.trigger_bot_inference import TriggerBot
 from quake_ai.utils.screen_capturing import ScreenCapturer
@@ -45,11 +43,10 @@ class System:
         - Blocking: Might run for a while, example is the training process of the trigger bot
     """
 
-    def __init__(self, system_root_path):
+    def __init__(self, config_path):
         """ Startup the system. Also loads tensorflow/CUDA libraries """
 
-        self._system_root_path = os.path.abspath(system_root_path)
-        self._config = QuakeAiConfig(self._system_root_path)
+        self._config = QuakeAiConfig(config_path)
 
         #######################################
         #             MEMBERS                 #
@@ -57,13 +54,10 @@ class System:
 
         self._screen_capturer = ScreenCapturer(self._config)
 
-        self._trigger_trainer = TriggerBotTrainer(image_path=os.path.join(self._system_root_path, 'triggerbot_images'),
-                                                  model_path=os.path.join(self._system_root_path, 'triggerbot_model'),
-                                                  config=self._config,
+        self._trigger_trainer = TriggerBotTrainer(config=self._config,
                                                   screenshot_func=self._screen_capturer.make_trigger_screenshot)
 
-        self._trigger_inference = TriggerBot(model_path=os.path.join(self._system_root_path, 'triggerbot_model'),
-                                             config=self._config,
+        self._trigger_inference = TriggerBot(config=self._config,
                                              screenshot_func=self._screen_capturer.make_trigger_screenshot)
 
         #####################################
@@ -71,16 +65,19 @@ class System:
         #####################################
 
         self._trigger_capture_task = NonBlockingTask(self._trigger_trainer.startup_capture,
-                                                     init_task_list=[self._screen_capturer.startup],
+                                                     init_task_list=[self._config.update_from_file,
+                                                                     self._screen_capturer.startup],
                                                      shutdown_task_list=[self._trigger_trainer.shutdown_capture,
                                                                          self._screen_capturer.shutdown])
 
         self._trigger_training_task = BlockingTask(self._trigger_trainer.train_epoch,
-                                                   init_task_list=[self._trigger_trainer.init_training],
+                                                   init_task_list=[self._config.update_from_file,
+                                                                   self._trigger_trainer.init_training],
                                                    shutdown_task_list=[self._trigger_trainer.shutdown_training])
 
         self._trigger_inference_task = BlockingTask(self._trigger_inference.run_inference,
-                                                    init_task_list=[self._screen_capturer.startup,
+                                                    init_task_list=[self._config.update_from_file,
+                                                                    self._screen_capturer.startup,
                                                                     self._trigger_inference.init_inference],
                                                     shutdown_task_list=[self._trigger_inference.shutdown_inference,
                                                                         self._screen_capturer.shutdown])

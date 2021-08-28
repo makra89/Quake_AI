@@ -36,33 +36,40 @@ from sklearn.model_selection import train_test_split
 
 from quake_ai.utils.model_helpers import TrainableTriggerModel
 
-_CAPTURE_KEY_POS = 'e'
-_CAPTURE_KEY_NEG = 'r'
-
 
 class TriggerBotTrainer:
     """ Main class for training the trigger bot """
 
-    def __init__(self, image_path, model_path, config, screenshot_func):
+    def __init__(self, config, screenshot_func):
         """ Initializes the data structure needed for training the model
 
-            :param image_path path to the training images (subfolders 'neg' and 'pos' may exist already)
-            :param model_path output path for trained model and tensorboard logs
             :param config configuration object
             :param screenshot_func screenshot function reference (from ImageCapturer)
         """
 
-        self._image_path = image_path
+        self._config = config
         self._fov = (config.trigger_fov[0], config.trigger_fov[1])
         self._screenshot_func = screenshot_func
-        self._model = TrainableTriggerModel(self._fov, model_path)
+        # Do not initialize the model here, prevent tensorflow from loading
+        self._model_root_path = os.path.join(self._config.training_env_path, 'triggerbot_model')
+        self._model = None
 
         self._hook_pos = None
         self._hook_neg = None
-        
+
         # Setup image paths
-        self._image_path_pos = os.path.join(os.path.abspath(image_path), 'pos')
-        self._image_path_neg = os.path.join(os.path.abspath(image_path), 'neg')
+        self._image_path = os.path.join(self._config.training_env_path, 'triggerbot_images')
+        self._image_path_pos = os.path.join(os.path.abspath(self._image_path), 'pos')
+        self._image_path_neg = os.path.join(os.path.abspath(self._image_path), 'neg')
+        # Will be initialized once during training startup
+        self._curr_image_neg_inc = None
+        self._curr_image_pos_inc = None
+
+        self._train_data_set = None
+        self._test_data_set = None
+
+    def startup_capture(self):
+        """ Startup capturing, hooks for keyboard keys will be placed """
 
         # Check if paths for 'positive' images already exist
         if not os.path.exists(self._image_path_pos):
@@ -78,14 +85,10 @@ class TriggerBotTrainer:
         else:
             self._curr_image_neg_inc = _get_latest_inc(self._image_path_neg) + 1
 
-        self._train_data_set = None
-        self._test_data_set = None
-
-    def startup_capture(self):
-        """ Startup capturing, hooks for keyboard keys will be placed """
-
-        self._hook_pos = keyboard.on_press_key(_CAPTURE_KEY_POS, self._save_pos_screenshot_callback)
-        self._hook_neg = keyboard.on_press_key(_CAPTURE_KEY_NEG, self._save_neg_screenshot_callback)
+        self._hook_pos = keyboard.on_press_key(self._config.trigger_train_capture_pos,
+                                               self._save_pos_screenshot_callback)
+        self._hook_neg = keyboard.on_press_key(self._config.trigger_train_capture_neg,
+                                               self._save_neg_screenshot_callback)
 
     def shutdown_capture(self):
         """ Release all hooks, stop capturing """
@@ -97,6 +100,14 @@ class TriggerBotTrainer:
 
     def init_training(self):
         """ Initialize training, collects image paths and creates data sets"""
+
+        if not os.path.exists(self._model_root_path):
+            os.makedirs(self._model_root_path)
+
+        # Only initialize once!
+        if self._model is None:
+            self._model = TrainableTriggerModel(self._config, self._fov,
+                                                os.path.join(self._model_root_path, 'triger_model.hdf5'))
 
         pos_path_labels = [(os.path.join(self._image_path_pos, image), 1) for image in os.listdir(self._image_path_pos)]
         neg_path_labels = [(os.path.join(self._image_path_neg, image), 0) for image in os.listdir(self._image_path_neg)]

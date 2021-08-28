@@ -28,43 +28,109 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
+from os.path import join, dirname
 import configparser
 
 
 class QuakeAiConfig:
-    """ Configuration object for Quake AI """
+    """ Configuration object for Quake AI
+        Partially this config is used for saving values (i.e. current learning rate).
+        Not so nice, but easiest way to do :/
+    """
 
-    def __init__(self, config_root_path):
+    def __init__(self, config_path):
         """ Initialize the configuration using a path.
             If not existing a default one will be generated.
         """
 
-        self._path = os.path.join(config_root_path, 'config.ini')
+        self._path = config_path
         self._config = configparser.ConfigParser()
 
         # Try to load an existing configuration
         try:
-            self._config.read_file(self._path)
-
-        except configparser.MissingSectionHeaderError:
+            with open(self._path, 'r') as file:
+                self._config.read_file(file)
+        except:
             # No config available --> create default one and write it
-            self._config = _create_default_config()
+            self._config = self._create_default_config()
             with open(self._path, 'w') as file:
                 self._config.write(file)
 
+    def update_from_file(self):
+        """ Update configuration object from the file """
+
+        with open(self._path, 'r') as file:
+            self._config.read_file(file)
+
+    @property
+    def training_env_path(self):
+        return self._config['GENERAL']['training_env_path']
+
+    @property
+    def trigger_model_path(self):
+        return self._config['TRIGGERBOT']['model_path']
+
     @property
     def trigger_fov(self):
-
         return int(self._config['TRIGGERBOT']['fov_height']), int(self._config['TRIGGERBOT']['fov_width'])
 
+    @property
+    def trigger_aim_size(self):
+        return int(self._config['TRIGGERBOT']['aim_size'])
 
-def _create_default_config():
-    """ Creates default config """
+    @property
+    def trigger_train_lr(self):
+        return float(self._config['TRIGGERBOT-TRAINING']['learning_rate'])
 
-    config = configparser.ConfigParser()
+    @trigger_train_lr.setter
+    def trigger_train_lr(self, value):
+        self._config['TRIGGERBOT-TRAINING']['learning_rate'] = str(value)
+        # Write changes to file
+        with open(self._path, 'w') as file:
+            self._config.write(file)
 
-    config['TRIGGERBOT'] = {'fov_height': '200',
-                            'fov_width': '200'}
+    @property
+    def trigger_train_batch_size(self):
+        return int(self._config['TRIGGERBOT-TRAINING']['batch_size'])
 
-    return config
+    @property
+    def trigger_train_shuffle_size(self):
+        return int(self._config['TRIGGERBOT-TRAINING']['shuffle_size'])
+
+    @property
+    def trigger_train_epochs(self):
+        return int(self._config['TRIGGERBOT-TRAINING']['num_epochs'])
+
+    @property
+    def trigger_train_capture_pos(self):
+        return self._config['TRIGGERBOT-TRAINING']['capture_key_pos']
+
+    @property
+    def trigger_train_capture_neg(self):
+        return self._config['TRIGGERBOT-TRAINING']['capture_key_neg']
+
+    def _create_default_config(self):
+        """ Creates default config """
+
+        config = configparser.ConfigParser()
+
+        # Default training environment is parallel to the used configuration
+        default_training_environment = join(dirname(self._path), 'training')
+        config['GENERAL'] = {'training_env_path': default_training_environment}
+
+        # Default model lies in the repository itself
+        default_trigger_model_path = join(dirname(dirname(dirname(__file__))), 'default_models\\trigger_model.hdf5')
+
+        config['TRIGGERBOT'] = {'model_path': default_trigger_model_path,
+                                'fov_height': '100',
+                                'fov_width': '100',
+                                'aim_size': '4'}
+
+        config['TRIGGERBOT-TRAINING'] = {'learning_rate': '0.01',
+                                         'batch_size': '30',
+                                         'shuffle_size': '100',
+                                         'num_epochs': '20',
+                                         'capture_key_pos': 'e',
+                                         'capture_key_neg': 'r'}
+
+        return config

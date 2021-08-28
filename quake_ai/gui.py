@@ -58,9 +58,9 @@ class QuakeAiGui:
         self._start_frame = tk.Frame(self._root)
         self._start_frame.pack(side=tk.BOTTOM)
 
-        self._root_path = tk.StringVar()
-        tk.Label(self._start_frame, text='Please choose a path for the root folder', bg='white').pack()
-        tk.Button(self._start_frame, text="Choose Folder", command=self._startup_system).pack()
+        self._config_path = tk.StringVar()
+        tk.Label(self._start_frame, text='Please choose a config to startup the system', bg='white').pack()
+        tk.Button(self._start_frame, text="Choose config", command=self._startup_system).pack()
 
         # Main frame
         self._main_frame = tk.Frame(self._root)
@@ -81,8 +81,8 @@ class QuakeAiGui:
     def _startup_system(self):
         """ Start the internal system """
 
-        self._root_path.set(filedialog.askdirectory())
-        self._system = System(self._root_path.get())
+        self._config_path.set(filedialog.asksaveasfilename())
+        self._system = System(self._config_path.get())
 
         self._start_frame.pack_forget()
         self._main_frame.pack()
