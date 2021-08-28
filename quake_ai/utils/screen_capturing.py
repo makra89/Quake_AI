@@ -28,8 +28,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import pyautogui as pgui
 import win32gui
+import mss
+from PIL import Image
 
 
 class _WindowRect:
@@ -65,6 +66,7 @@ class ScreenCapturer:
         self._process_handle = None
         self._window_rect = None  # Window of main process (without bars)
         self._trigger_fov_rect = None  # Window for trigger bot fov
+        self._mss_handle = None
 
     def startup(self):
         """ Attach ScreenCapturer to the Quake Live handle (if existing)
@@ -94,22 +96,37 @@ class ScreenCapturer:
             self._trigger_fov_rect = self._window_rect.calc_center_crop_rect(trigger_fov_height,
                                                                              trigger_fov_width)
 
+            self._mss_handle = mss.mss()
+
     def shutdown(self):
         """ Is there anything to do with the process handle? """
 
         self._process_handle = None
         self._window_rect = None
+        self._mss_handle = None
 
     def make_window_screenshot(self):
         """ Make and return screenshot of the complete process window """
 
-        return pgui.screenshot(region=(self._window_rect.left, self._window_rect.top,
-                                       self._window_rect.right-self._window_rect.left,
-                                       self._window_rect.bottom-self._window_rect.top))
+        monitor = {"top": self._window_rect.top, "left": self._window_rect.left,
+                   "width": self._window_rect.right - self._window_rect.left,
+                   "height": self._window_rect.bottom - self._window_rect.top}
+
+        return pil_frombytes(self._mss_handle.grab(monitor))
 
     def make_trigger_screenshot(self):
         """ Make and return screenshot of the trigger bot fov """
 
-        return pgui.screenshot(region=(self._trigger_fov_rect.left, self._trigger_fov_rect.top,
-                                       self._trigger_fov_rect.right - self._trigger_fov_rect.left,
-                                       self._trigger_fov_rect.bottom - self._trigger_fov_rect.top))
+        monitor = {"top": self._trigger_fov_rect.top, "left": self._trigger_fov_rect.left,
+                   "width": self._trigger_fov_rect.right - self._trigger_fov_rect.left,
+                   "height": self._trigger_fov_rect.bottom - self._trigger_fov_rect.top}
+
+        return pil_frombytes(self._mss_handle.grab(monitor))
+
+
+# From https://python-mss.readthedocs.io/examples.html#bgra-to-rgb
+# Converts BGRA to RGB
+def pil_frombytes(image):
+    """ Efficient Pillow version. """
+    
+    return Image.frombytes('RGB', image.size, image.bgra, 'raw', 'BGRX')
