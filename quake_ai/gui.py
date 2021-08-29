@@ -75,12 +75,10 @@ class QuakeAiGui:
         # Main frame
         self._main_frame = tk.Frame(self._root, bg='white')
 
-        status = tk.LabelFrame(self._main_frame, text="System status", font=('Helvetica', 10), bg='white')
         self._status_text = tk.StringVar(self._main_frame)
         self._status_text.set('Idle')
-        tk.Label(status, textvariable=self._status_text, font=('Helvetica', 16, 'bold'), bg='white',
+        tk.Label(self._main_frame, textvariable=self._status_text, font=('Helvetica', 16, 'bold'), bg='white',
                  relief=tk.SUNKEN).pack(pady=10)
-        status.pack(ipadx=154)
 
         training = tk.LabelFrame(self._main_frame, text="Triggerbot Training", font=('Helvetica', 10), bg='white')
         tk.Button(training, text="Capture Images for Triggerbot", font=('Helvetica', 10),
