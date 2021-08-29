@@ -30,6 +30,7 @@
 
 from quake_ai.core.trigger_bot_training import TriggerBotTrainer
 from quake_ai.core.trigger_bot_inference import TriggerBot
+from quake_ai.core.aim_bot_training import AimbotTrainer
 from quake_ai.utils.screen_capturing import ScreenCapturer
 from quake_ai.utils.threading import NonBlockingTask, BlockingTask
 from quake_ai.core.config import QuakeAiConfig
@@ -60,6 +61,9 @@ class System:
         self._trigger_inference = TriggerBot(config=self._config,
                                              screenshot_func=self._screen_capturer.make_trigger_screenshot)
 
+        self._aimbot_trainer = AimbotTrainer(config=self._config,
+                                             screenshot_func=self._screen_capturer.make_aimbot_train_screenshot)
+
         #####################################
         #             TASKS                 #
         #####################################
@@ -82,9 +86,19 @@ class System:
                                                     shutdown_task_list=[self._trigger_inference.shutdown_inference,
                                                                         self._screen_capturer.shutdown])
 
+        self._aimbot_capture_task = NonBlockingTask(self._aimbot_trainer.startup_capture,
+                                                    init_task_list=[self._config.update_from_file,
+                                                                    self._screen_capturer.startup],
+                                                    shutdown_task_list=[self._aimbot_trainer.shutdown_capture,
+                                                                        self._screen_capturer.shutdown])
+
     @property
     def trigger_capture_task(self):
         return self._trigger_capture_task
+
+    @property
+    def aimbot_capture_task(self):
+        return self._aimbot_capture_task
 
     @property
     def trigger_training_task(self):

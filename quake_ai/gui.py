@@ -75,28 +75,27 @@ class QuakeAiGui:
         # Main frame
         self._main_frame = tk.Frame(self._root, bg='white')
 
-        status = tk.LabelFrame(self._main_frame, text="System status", font=('Helvetica', 10), bg='white')
         self._status_text = tk.StringVar(self._main_frame)
         self._status_text.set('Idle')
-        tk.Label(status, textvariable=self._status_text, font=('Helvetica', 16, 'bold'), bg='white',
+        tk.Label(self._main_frame, textvariable=self._status_text, font=('Helvetica', 16, 'bold'), bg='white',
                  relief=tk.SUNKEN).pack(pady=10)
-        status.pack(ipadx=154)
 
-        training = tk.LabelFrame(self._main_frame, text="Triggerbot Training", font=('Helvetica', 10), bg='white')
-        tk.Button(training, text="Capture Images for Triggerbot", font=('Helvetica', 10),
+        trigger_training = tk.LabelFrame(self._main_frame, text="Triggerbot Training", font=('Helvetica', 10), bg='white')
+        tk.Button(trigger_training, text="Capture Images for Triggerbot", font=('Helvetica', 10),
                   command=self._run_trigger_capture_task).pack(pady=10)
-        tk.Button(training, text="Start Training for Triggerbot", font=('Helvetica', 10),
+        tk.Button(trigger_training, text="Start Training for Triggerbot", font=('Helvetica', 10),
                   command=self._run_trigger_training_task).pack(pady=10)
-        training.pack(ipadx=110)
+        trigger_training.pack(ipadx=110)
 
         triggerbot = tk.LabelFrame(self._main_frame, text="Triggerbot", font=('Helvetica', 10), bg='white')
         tk.Button(triggerbot, text="Start Triggerbot", font=('Helvetica', 10),
                   command=self._run_trigger_inference_task).pack(pady=10)
         triggerbot.pack(ipadx=150)
 
-        aimbot = tk.LabelFrame(self._main_frame, text="Aimbot", font=('Helvetica', 10), bg='white')
-        tk.Label(aimbot, text="Coming Soon", bg='white', font=('Helvetica', 10, 'bold')).pack(pady=10)
-        aimbot.pack(ipadx=154)
+        aimbot_training = tk.LabelFrame(self._main_frame, text="Aimbot Training", font=('Helvetica', 10), bg='white')
+        tk.Button(aimbot_training, text="Capture Images for Aimbot", font=('Helvetica', 10),
+                  command=self._run_aimbot_capture_task).pack(pady=10)
+        aimbot_training.pack(ipadx=118)
 
         tk.Button(self._main_frame, text="Stop Current Task", font=('Helvetica', 10),
                   command=self._stop_current_task).pack(pady=10)
@@ -120,6 +119,16 @@ class QuakeAiGui:
             self._running_task = self._system.trigger_capture_task
             self._running_thread = threading.Thread(target=self._running_task.start)
             self._status_text.set('TriggerBot - Capturing')
+            self._running_thread.start()
+
+    def _run_aimbot_capture_task(self):
+        """ Run image capturing task for aimbot """
+
+        if self._running_task is None and self._running_thread is None:
+
+            self._running_task = self._system.aimbot_capture_task
+            self._running_thread = threading.Thread(target=self._running_task.start)
+            self._status_text.set('Aimbot - Capturing')
             self._running_thread.start()
 
     def _run_trigger_training_task(self):
