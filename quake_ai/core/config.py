@@ -109,6 +109,15 @@ class QuakeAiConfig:
     def trigger_train_capture_neg(self):
         return self._config['TRIGGERBOT-TRAINING']['capture_key_neg']
 
+    @property
+    def aimbot_train_image_fov(self):
+        return int(self._config['AIMBOT-TRAINING']['image_height']), \
+               int(self._config['AIMBOT-TRAINING']['image_width'])
+
+    @property
+    def aimbot_train_capture_key(self):
+        return self._config['AIMBOT-TRAINING']['capture_key']
+
     def _create_default_config(self):
         """ Creates default config """
 
@@ -132,5 +141,9 @@ class QuakeAiConfig:
                                          'num_epochs': '20',
                                          'capture_key_pos': 'e',
                                          'capture_key_neg': 'r'}
+
+        config['AIMBOT-TRAINING'] = {'image_height': '500',  # For capturing!
+                                     'image_width': '1000',  # For capturing!
+                                     'capture_key': 'e'}
 
         return config
