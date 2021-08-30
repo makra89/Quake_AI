@@ -31,6 +31,9 @@
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras import backend as bk
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Concatenate, \
+    AveragePooling2D, Flatten, Dropout, Activation, Dense
+from tensorflow.keras.regularizers import l2
 import numpy as np
 import os
 import datetime
@@ -65,7 +68,7 @@ class TriggerModel:
         image = self._preprocess_image(image)
         prediction = self._model(image)
 
-        return np.argmax(prediction) == 1
+        return np.argmax(prediction, axis=1) == 1
 
     def shutdown_inference(self):
 
@@ -187,31 +190,70 @@ class TrainableTriggerModel(TriggerModel):
         return image, label
 
     def _create_trigger_model(self, image_shape):
-        """ Create the keras model itself (not compiled yet) """
+        """ Create the keras model itself (not compiled yet)
 
+            The model itself is inspired by GoogleNet.
+            I take the input block + the first two inception layers.
+        """
+
+        # Input block of GoogleNet
+        # Get rid of first 7x7 convolution since trigger bot fov is already quite small
         image_input = keras.Input(shape=(image_shape[0], image_shape[1], 3))
 
-        conv = keras.layers.Conv2D(filters=32, strides=(2, 2), kernel_size=3,
-                                   activation=None, kernel_regularizer=tf.keras.regularizers.l1(0.001))(image_input)
-        act = keras.layers.Activation(keras.activations.relu)(conv)
-        conv = keras.layers.Conv2D(filters=64, strides=(2, 2), kernel_size=3,
-                                   kernel_regularizer=tf.keras.regularizers.l1(0.001), activation=None)(act)
-        act = keras.layers.Activation(keras.activations.relu)(conv)
-        pooling = keras.layers.MaxPooling2D()(act)
-        conv = keras.layers.Conv2D(filters=128, strides=(2, 2), kernel_size=3,
-                                   kernel_regularizer=tf.keras.regularizers.l1(0.001), activation=None)(pooling)
-        act = keras.layers.Activation(keras.activations.relu)(conv)
-        pooling = keras.layers.MaxPooling2D()(act)
+        # Input block of GoogleNet
+        # Get rid of first 7x7 convolution and replace with 3x3 since we are already quite small
+        input_block_conv_1 = Conv2D(filters=64, kernel_size=3, strides=(1, 1), padding='valid',
+                                    activation='relu', kernel_regularizer=l2())(image_input)
+        input_block_pool_2 = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='valid',)(input_block_conv_1)
+        input_block_conv_3 = Conv2D(filters=192, kernel_size=3, strides=(1, 1), padding='same',
+                                    activation='relu', kernel_regularizer=l2())(input_block_pool_2)
+        input_block_pool_4 = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same')(input_block_conv_3)
 
-        # Dense part
-        flat = keras.layers.Flatten()(pooling)
-        dense = keras.layers.Dense(units=64, activation="relu")(flat)
-        dropout = keras.layers.Dropout(rate=0.2)(dense)
-        dense = keras.layers.Dense(units=32, activation="relu")(dropout)
-        out = keras.layers.Dense(units=2, activation='softmax')(dense)
+        # First inception block
+        inception_1_1x1 = Conv2D(filters=64, kernel_size=1, strides=(1, 1), padding='same',
+                                 activation='relu', kernel_regularizer=l2())(input_block_pool_4)
+        inception_1_3x3_red = Conv2D(filters=96, kernel_size=1, strides=(1, 1), padding='same',
+                                     activation='relu', kernel_regularizer=l2())(input_block_pool_4)
+        inception_1_3x3 = Conv2D(filters=128, kernel_size=3, strides=(1, 1), padding='same',
+                                 activation='relu', kernel_regularizer=l2())(inception_1_3x3_red)
+        inception_1_5x5_red = Conv2D(filters=16, kernel_size=1, strides=(1, 1), padding='same',
+                                     activation='relu', kernel_regularizer=l2())(input_block_pool_4)
+        inception_1_5x5 = Conv2D(filters=32, kernel_size=5, strides=(1, 1), padding='same',
+                                 activation='relu', kernel_regularizer=l2())(inception_1_5x5_red)
+        inception_1_pool = MaxPooling2D(pool_size=(3, 3), strides=(1, 1), padding='same')(input_block_pool_4)
+        inception_1_pool_proj = Conv2D(filters=32, kernel_size=1, strides=(1, 1), padding='same',
+                                       activation='relu', kernel_regularizer=l2())(inception_1_pool)
+        inception_1_output = Concatenate(axis=3)([inception_1_1x1, inception_1_3x3,
+                                                  inception_1_5x5, inception_1_pool_proj])
+        max_pool_1 = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same')(inception_1_output)
+
+        # Second inception block
+        inception_2_1x1 = Conv2D(filters=128, kernel_size=1, strides=(1, 1), padding='same',
+                                 activation='relu', kernel_regularizer=l2())(max_pool_1)
+        inception_2_3x3_red = Conv2D(filters=128, kernel_size=1, strides=(1, 1), padding='same',
+                                     activation='relu', kernel_regularizer=l2())(max_pool_1)
+        inception_2_3x3 = Conv2D(filters=192, kernel_size=3, strides=(1, 1), padding='same',
+                                 activation='relu', kernel_regularizer=l2())(inception_2_3x3_red)
+        inception_2_5x5_red = Conv2D(filters=32, kernel_size=1, strides=(1, 1), padding='same',
+                                     activation='relu', kernel_regularizer=l2())(max_pool_1)
+        inception_2_5x5 = Conv2D(filters=96, kernel_size=5, strides=(1, 1), padding='same',
+                                 activation='relu', kernel_regularizer=l2())(inception_2_5x5_red)
+        inception_2_pool = MaxPooling2D(pool_size=(3, 3), strides=(1, 1), padding='same')(max_pool_1)
+        inception_2_pool_proj = Conv2D(filters=64, kernel_size=1, strides=(1, 1), padding='same',
+                                       activation='relu', kernel_regularizer=l2())(inception_2_pool)
+        inception_2_output = Concatenate(axis=3)([inception_2_1x1, inception_2_3x3,
+                                                  inception_2_5x5, inception_2_pool_proj])
+
+        max_pool_2 = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same')(inception_2_output)
+
+        # Output block
+        output_pool = AveragePooling2D(pool_size=(6, 6), strides=(1, 1), padding='same')(max_pool_2)
+        output_flat = Flatten()(output_pool)
+        output_dropout = Dropout(rate=0.2)(output_flat)
+        output_class = Dense(2, kernel_regularizer=l2(), activation='softmax')(output_dropout)
 
         # Construct the model itself
-        model = keras.models.Model(inputs=image_input, outputs=out)
+        model = keras.models.Model(inputs=image_input, outputs=output_class)
         print(model.summary())
 
         return model
@@ -253,4 +295,3 @@ class ImageLogger:
                              max_outputs=self._max_images)
 
         return image, label
-

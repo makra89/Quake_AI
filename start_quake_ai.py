@@ -31,3 +31,4 @@
 from quake_ai import QuakeAiGui
 
 quake_ai = QuakeAiGui()
+

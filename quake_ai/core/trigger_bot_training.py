@@ -107,7 +107,7 @@ class TriggerBotTrainer:
         # Only initialize once!
         if self._model is None:
             self._model = TrainableTriggerModel(self._config, self._fov,
-                                                os.path.join(self._model_root_path, 'triger_model.hdf5'))
+                                                os.path.join(self._model_root_path, 'trigger_model.hdf5'))
 
         pos_path_labels = [(os.path.join(self._image_path_pos, image), 1) for image in os.listdir(self._image_path_pos)]
         neg_path_labels = [(os.path.join(self._image_path_neg, image), 0) for image in os.listdir(self._image_path_neg)]

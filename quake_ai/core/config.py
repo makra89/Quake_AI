@@ -118,6 +118,18 @@ class QuakeAiConfig:
     def aimbot_train_capture_key(self):
         return self._config['AIMBOT-TRAINING']['capture_key']
 
+    @property
+    def annotator_num_images_per_step(self):
+        return int(self._config['AIMBOT-ANNOTATION']['num_images_per_step'])
+
+    @property
+    def annotator_step_size_height(self):
+        return int(self._config['AIMBOT-ANNOTATION']['step_size_height'])
+
+    @property
+    def annotator_step_size_width(self):
+        return int(self._config['AIMBOT-ANNOTATION']['step_size_width'])
+
     def _create_default_config(self):
         """ Creates default config """
 
@@ -142,8 +154,12 @@ class QuakeAiConfig:
                                          'capture_key_pos': 'e',
                                          'capture_key_neg': 'r'}
 
-        config['AIMBOT-TRAINING'] = {'image_height': '500',  # For capturing!
-                                     'image_width': '1000',  # For capturing!
+        config['AIMBOT-TRAINING'] = {'image_height': '300',
+                                     'image_width': '530',
                                      'capture_key': 'e'}
+
+        config['AIMBOT-ANNOTATION'] = {'num_images_per_step': 10,
+                                       'step_size_height': 4,
+                                       'step_size_width': 4}
 
         return config

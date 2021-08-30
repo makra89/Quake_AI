@@ -30,7 +30,7 @@
 
 from quake_ai.core.trigger_bot_training import TriggerBotTrainer
 from quake_ai.core.trigger_bot_inference import TriggerBot
-from quake_ai.core.aim_bot_training import AimbotTrainer
+from quake_ai.core.aim_bot_training import AimbotTrainer, ImageAnnotator
 from quake_ai.utils.screen_capturing import ScreenCapturer
 from quake_ai.utils.threading import NonBlockingTask, BlockingTask
 from quake_ai.core.config import QuakeAiConfig
@@ -64,6 +64,8 @@ class System:
         self._aimbot_trainer = AimbotTrainer(config=self._config,
                                              screenshot_func=self._screen_capturer.make_aimbot_train_screenshot)
 
+        self._image_annotator = ImageAnnotator(config=self._config)
+
         #####################################
         #             TASKS                 #
         #####################################
@@ -92,6 +94,11 @@ class System:
                                                     shutdown_task_list=[self._aimbot_trainer.shutdown_capture,
                                                                         self._screen_capturer.shutdown])
 
+        self._aimbot_annotation_task = BlockingTask(self._image_annotator.run_annotation,
+                                                    init_task_list=[self._config.update_from_file,
+                                                                    self._image_annotator.startup_annotation],
+                                                    shutdown_task_list=[self._image_annotator.shutdown_annotation])
+
     @property
     def trigger_capture_task(self):
         return self._trigger_capture_task
@@ -99,6 +106,10 @@ class System:
     @property
     def aimbot_capture_task(self):
         return self._aimbot_capture_task
+
+    @property
+    def aimbot_annotation_task(self):
+        return self._aimbot_annotation_task
 
     @property
     def trigger_training_task(self):
