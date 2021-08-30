@@ -155,25 +155,29 @@ class ImageAnnotator:
             padded_image.paste(image, (radius_x, radius_y))
 
             # Collect the x (height) and y (width) CENTER coordinates
-            step_size_x = 8  # Seems to be a good compromise of performance vs. detection quality
-            step_size_y = 4  # Seems to be a good compromise of performance vs. detection quality
             center_x_list = np.arange(0, self._aimbot_training_fov[0] + self._step_size_height, self._step_size_height)
             center_y_list = np.arange(0, self._aimbot_training_fov[1] - self._step_size_width, self._step_size_width)
             # Empty matrix to collect the triggerbot response
             output = np.zeros((self._aimbot_training_fov[0],
                                self._aimbot_training_fov[1]))
 
-            for x in center_x_list:
-                for y in center_y_list:
-                    # Crop trigger bot fov
+            # Perform predictions in batches along x, much faster!
+            for y in center_y_list:
+
+                image_batch = np.zeros((len(center_x_list), self._trigger_fov[0],
+                                        self._trigger_fov[1], 3))
+                for idx, x in enumerate(center_x_list):
                     crop = np.array(padded_image.crop((y - radius_y + radius_y, x - radius_x + radius_x,
                                                        y + radius_y + radius_y, x + radius_x + radius_x)))
 
-                    # And predict whether we are on target
-                    if self._model.predict_is_on_target(np.expand_dims(crop, axis=0)):
-                        half_step_height = int(self._step_size_height/2.)
-                        half_step_width = int(self._step_size_width/2.)
-                        output[x-half_step_height:x+half_step_height, y-half_step_width:y+half_step_width] = 255
+                    image_batch[idx, :, :, :] = crop
+                is_on_target = self._model.predict_is_on_target(image_batch)
+
+                for idx, x in enumerate(center_x_list):
+                    if is_on_target[idx]:
+                        half_step_height = int(self._step_size_height / 2.)
+                        half_step_width = int(self._step_size_width / 2.)
+                        output[x - half_step_height:x + half_step_height, y - half_step_width:y + half_step_width] = 255
 
             # Find contours in response map
             cnts, hierarchy = cv.findContours(output.astype(np.uint8), cv.RETR_EXTERNAL,
@@ -187,7 +191,7 @@ class ImageAnnotator:
             # Filter out very small boxes
             filtered_boxes = []
             for box in bounding_boxes:
-                if box[2] >= 2 * step_size_y and box[3] >= 2 * step_size_x:
+                if box[2] >= 2 * self._step_size_width and box[3] >= 2 * self._step_size_height:
                     filtered_boxes.append(box)
 
             # Create annotation files
@@ -220,7 +224,8 @@ def _get_latest_inc(path):
         If there are missing image numbers in between, this will be wrong
     """
 
-    images = [os.path.join(path, image) for image in os.listdir(path)]
+    images = [os.path.join(path, image) for image in os.listdir(path) if '.png' in image]
+
     if not images:
         return 0
     else:

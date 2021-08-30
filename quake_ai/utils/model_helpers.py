@@ -68,7 +68,7 @@ class TriggerModel:
         image = self._preprocess_image(image)
         prediction = self._model(image)
 
-        return np.argmax(prediction) == 1
+        return np.argmax(prediction, axis=1) == 1
 
     def shutdown_inference(self):
 

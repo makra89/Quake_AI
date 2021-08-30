@@ -158,8 +158,8 @@ class QuakeAiConfig:
                                      'image_width': '530',
                                      'capture_key': 'e'}
 
-        config['AIMBOT-ANNOTATION'] = {'num_images_per_step': 2,
-                                       'step_size_height': 8,
+        config['AIMBOT-ANNOTATION'] = {'num_images_per_step': 10,
+                                       'step_size_height': 4,
                                        'step_size_width': 4}
 
         return config
