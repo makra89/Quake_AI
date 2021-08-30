@@ -78,3 +78,4 @@ class TriggerBot:
         self._model.shutdown_inference()
 
 
+
