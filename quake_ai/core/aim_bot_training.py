@@ -201,16 +201,18 @@ class ImageAnnotator:
                     for box in filtered_boxes:
                         # Left, Top, Right, Bottom
                         file.write(str(box[0]) + ' ' + str(box[1]) + ' ' + str(box[2]) + ' ' + str(box[3]) + '\n')
+
+                # And finally save the annotated image for manual inspection
+                for box in filtered_boxes:
+                    cv.rectangle(image, (int(box[0]), int(box[1])),
+                                    (int(box[0] + box[2]), int(box[1] + box[3])), (0, 255, 0), 2)
+
+                cv.imwrite(os.path.join(self._annotated_image_path, image_file), image)
+
             # If there are none, remove the file
             else:
                 os.remove(os.path.join(self._image_path, image_file))
 
-            # And finally save the annotated image for manual inspection
-            for box in filtered_boxes:
-                cv.rectangle(image, (int(box[0]), int(box[1])),
-                             (int(box[0] + box[2]), int(box[1] + box[3])), (0, 255, 0), 2)
-
-            cv.imwrite(os.path.join(self._annotated_image_path, image_file), image)
             self._current_image_idx += 1
 
     def shutdown_annotation(self):
