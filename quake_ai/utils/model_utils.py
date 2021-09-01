@@ -28,54 +28,43 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import tensorflow as tf
 import numpy as np
-import pyautogui as pgui
-import time
-
-from quake_ai.utils.trigger_model import TriggerModel
 
 
-class TriggerBot:
-    """ Main class for trigger bot inference """
+class _AimMask:
+    """ Utility class for marking the aim dot (the user has to set this!) """
 
-    def __init__(self, config, screenshot_func):
-        """ Initializes the trigger bot
+    def __init__(self, image_shape, aim_size):
+        """ Initialize mask itself, returns tensorflow tensor """
 
-            :param model_path path to the trained(!) model
-            :param config configuration object
-            :param screenshot_func screenshot function reference (from ImageCapturer)
-        """
+        mask = np.ones((image_shape[0], image_shape[1], 3))
+        mask[int(0.5 * (image_shape[0] - aim_size)): int(0.5 * (image_shape[0] - aim_size) + aim_size),
+             int(0.5 * (image_shape[1] - aim_size)): int(0.5 * (image_shape[1] - aim_size) + aim_size), :] = 0
+        self._tf_mask = tf.cast(tf.convert_to_tensor(mask), tf.float32)
 
-        self._config = config
-        self._model_path = config.trigger_model_path
-        self._screenshot_func = screenshot_func
-        self._fov = (config.trigger_fov[0], config.trigger_fov[1])
-        # Do not do it here, prevent tensorflow from loading
-        self._model = None
+    @property
+    def mask(self):
 
-    def init_inference(self):
-        """ Initialize the model for inference (tries to load the saved model) """
-
-        # Only initialize once!
-        if self._model is None:
-            self._model = TriggerModel(self._config, self._fov, self._model_path)
-
-        self._model.init_inference()
-
-    def run_inference(self):
-        """ Run the trigger bot for one screenshot, this will perform mouse_events! """
-
-        screenshot = np.expand_dims(np.array(self._screenshot_func()), axis=0)
-
-        if self._model.predict_is_on_target(screenshot):
-            pgui.mouseDown()
-            time.sleep(pgui.PAUSE)
-            pgui.mouseUp()
-
-    def shutdown_inference(self):
-        """ Stop the inference """
-
-        self._model.shutdown_inference()
+        return self._tf_mask
 
 
+class ImageLogger:
+    """ Utility class for logging images in tensorboard """
 
+    def __init__(self, name, logdir, max_images=2):
+        """ Initialize it, creates image tab named "name" in tensorboard """
+
+        self.file_writer = tf.summary.create_file_writer(logdir)
+        self.name = name
+        self._max_images = max_images
+
+    def __call__(self, image, label):
+        """ Will be performed for every batch call (but only two images will be saved) """
+
+        with self.file_writer.as_default():
+            tf.summary.image(self.name, image,
+                             step=0,  # Always overwrite images, do not save
+                             max_outputs=self._max_images)
+
+        return image, label

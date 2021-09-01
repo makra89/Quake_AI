@@ -34,7 +34,7 @@ import keyboard
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-from quake_ai.utils.model_helpers import TrainableTriggerModel
+from quake_ai.utils.trigger_model import TrainableTriggerModel
 
 
 class TriggerBotTrainer:
@@ -107,7 +107,7 @@ class TriggerBotTrainer:
         # Only initialize once!
         if self._model is None:
             self._model = TrainableTriggerModel(self._config, self._fov,
-                                                os.path.join(self._model_root_path, 'trigger_model.hdf5'))
+                                                os.path.join(self._model_root_path, 'trigger_model.tf'))
 
         pos_path_labels = [(os.path.join(self._image_path_pos, image), 1) for image in os.listdir(self._image_path_pos)]
         neg_path_labels = [(os.path.join(self._image_path_neg, image), 0) for image in os.listdir(self._image_path_neg)]
@@ -115,14 +115,14 @@ class TriggerBotTrainer:
         # Get test and train sets
         paths_labels_train, paths_labels_test = train_test_split(all_paths_labels, shuffle=True, test_size=0.20)
 
-        self._train_data_set = self._model.create_dataset(paths_labels_train)
+        self._train_data_set = self._model.create_dataset(paths_labels_train, augment=True, shuffle=True)
         self._test_data_set = self._model.create_dataset(paths_labels_test)
 
     def train_epoch(self):
-        """ Train for one epoch """
+        """ Train for a number of epochs (see config) """
 
         if self._train_data_set is not None and self._train_data_set is not None:
-            self._model.fit_one_epoch(self._train_data_set, self._test_data_set)
+            self._model.fit_num_epochs(self._train_data_set, self._test_data_set)
         else:
             raise RuntimeError("[Triggerbot]: No training or test set available")
 

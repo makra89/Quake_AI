@@ -31,15 +31,16 @@
 import numpy as np
 import pyautogui as pgui
 import time
+from PIL import Image
 
-from quake_ai.utils.trigger_model import TriggerModel
+from quake_ai.utils.aimbot_model import AimbotModel
 
 
-class TriggerBot:
-    """ Main class for trigger bot inference """
+class Aimbot:
+    """ Main class for aimbot inference """
 
-    def __init__(self, config, screenshot_func):
-        """ Initializes the trigger bot
+    def __init__(self, config, screenshot_func=None):
+        """ Initializes the aimbot
 
             :param model_path path to the trained(!) model
             :param config configuration object
@@ -47,9 +48,9 @@ class TriggerBot:
         """
 
         self._config = config
-        self._model_path = config.trigger_model_path
+        self._model_path = config.aimbot_model_path
         self._screenshot_func = screenshot_func
-        self._fov = (config.trigger_fov[0], config.trigger_fov[1])
+        self._fov = (config.aimbot_inference_image_size, config.aimbot_inference_image_size)
         # Do not do it here, prevent tensorflow from loading
         self._model = None
 
@@ -58,19 +59,25 @@ class TriggerBot:
 
         # Only initialize once!
         if self._model is None:
-            self._model = TriggerModel(self._config, self._fov, self._model_path)
+            self._model = AimbotModel(self._config, self._fov, self._model_path)
 
         self._model.init_inference()
 
-    def run_inference(self):
+    def run_inference(self, path):
         """ Run the trigger bot for one screenshot, this will perform mouse_events! """
 
-        screenshot = np.expand_dims(np.array(self._screenshot_func()), axis=0)
+        #screenshot = np.array(self._screenshot_func())
+        img_raw = np.array(Image.open(path).convert("RGB"))
 
-        if self._model.predict_is_on_target(screenshot):
-            pgui.mouseDown()
-            time.sleep(pgui.PAUSE)
-            pgui.mouseUp()
+        self._model.predict(img_raw)
+
+    def run_inference_screen(self):
+        """ Run the trigger bot for one screenshot, this will perform mouse_events! """
+
+        screenshot = np.array(self._screenshot_func())
+        #img_raw = np.array(Image.open(path).convert("RGB"))
+
+        self._model.predict(screenshot)
 
     def shutdown_inference(self):
         """ Stop the inference """

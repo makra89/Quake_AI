@@ -32,16 +32,16 @@ import os
 import keyboard
 import numpy as np
 import re
-from PIL import Image
-import cv2 as cv
+from sklearn.model_selection import train_test_split
 
-from quake_ai.utils.model_helpers import TriggerModel
+import yolov3_tf2.dataset as dataset
+from quake_ai.utils.aimbot_model import TrainableAimbotModel
 
 
 class AimbotTrainer:
     """ Main class for training the aim bot """
 
-    def __init__(self, config, screenshot_func):
+    def __init__(self, config, screenshot_func=None):
         """ Initializes the data structure needed for training the model
 
             :param config configuration object
@@ -49,14 +49,23 @@ class AimbotTrainer:
         """
 
         self._config = config
-        self._fov = (config.trigger_fov[0], config.trigger_fov[1])
+        self._fov = (self._config.aimbot_train_image_size, self._config.aimbot_train_image_size)
         self._screenshot_func = screenshot_func
+        # Do not initialize the model here, prevent tensorflow from loading
+        self._model_root_path = os.path.join(self._config.training_env_path, 'aimbot_model')
+        self._model = None
 
         self._hook_screenshot = None
 
         # Setup image paths
         self._image_path = os.path.join(self._config.training_env_path, 'aimbot_images')
         self._curr_image_inc = None
+
+        self._train_data_tfrecord_path = os.path.join(self._model_root_path, 'train.tfrecord')
+        self._test_data_tfrecord_path = os.path.join(self._model_root_path, 'test.tfrecord')
+
+        self._train_data_set = None
+        self._test_data_set = None
 
     def startup_capture(self):
         """ Startup capturing, hook for keyboard key will be placed """
@@ -77,6 +86,42 @@ class AimbotTrainer:
         if self._hook_screenshot is not None:
             keyboard.unhook(self._hook_screenshot)
 
+    def init_training(self):
+        """ Initialize training, collects image paths and creates data sets"""
+
+        if not os.path.exists(self._model_root_path):
+            os.makedirs(self._model_root_path)
+
+        # Only initialize once!
+        if self._model is None:
+            self._model = TrainableAimbotModel(self._config, self._fov,
+                                                os.path.join(self._model_root_path, 'aimbot_model.hdf5'))
+
+        if not os.path.isfile(self._train_data_tfrecord_path) and not os.path.isfile(self._test_data_tfrecord_path):
+            # Only create if not existing
+            images_labels = _get_annotations_and_images(self._image_path)
+            images_labels_train, images_labels_test = train_test_split(images_labels, shuffle=True, test_size=0.20)
+
+            self._model.create_tfrecords(self._train_data_tfrecord_path, images_labels_train)
+            self._model.create_tfrecords(self._test_data_tfrecord_path, images_labels_test)
+
+        self._train_data_set = self._model.create_dataset(self._train_data_tfrecord_path, augment=True, shuffle=True)
+        self._test_data_set = self._model.create_dataset(self._train_data_tfrecord_path)
+
+    def train_epoch(self):
+        """ Train for a number of epochs (see config) """
+
+        if self._train_data_set is not None and self._train_data_set is not None:
+            self._model.fit_num_epochs(self._train_data_set, self._test_data_set)
+        else:
+            raise RuntimeError("[Triggerbot]: No training or test set available")
+
+    def shutdown_training(self):
+        """ Shutdown training process, nothing to do here """
+
+        self._train_data_set = None
+        self._test_data_set = None
+
     def _save_screenshot_callback(self, _):
         """ Save a screenshot done using the screenshot handle """
 
@@ -86,139 +131,6 @@ class AimbotTrainer:
         print("Current number of images:", self._curr_image_inc)
 
         image.save(os.path.join(self._image_path, str(self._curr_image_inc) + '.png'))
-
-
-class ImageAnnotator:
-    """ Automatically annotates images for the aimbot training by
-        sliding the triggerbot fov over an entire image.
-        For every image in the path it will create a <image_name>_anno.txt file
-    """
-
-    def __init__(self, config):
-        """ Initialize the annotator, uses the path to the trained trigger model """
-
-        self._config = config
-        self._image_path = os.path.join(self._config.training_env_path, 'aimbot_images')
-        self._annotated_image_path = os.path.join(self._image_path, 'annotated_images')
-        self._model_path = config.trigger_model_path
-        self._trigger_fov = (config.trigger_fov[0], config.trigger_fov[1])
-        self._aimbot_training_fov = config.aimbot_train_image_fov
-        self._step_size_height = config.annotator_step_size_height
-        self._step_size_width = config.annotator_step_size_width
-        # Do not do it here, prevent tensorflow from loading
-        self._model = None
-        self._file_list = None
-        self._current_image_idx = None
-        self._num_images_to_process = config.annotator_num_images_per_step
-
-    def startup_annotation(self):
-        """ Initialize the trigger model for annotation """
-
-        # Check if path for images already exists
-        if not os.path.exists(self._annotated_image_path):
-            os.makedirs(self._annotated_image_path)
-
-        # Only initialize once!
-        if self._model is None:
-            self._model = TriggerModel(self._config, self._trigger_fov, self._model_path)
-
-        # Now collect all images(!) that do not have an annotation file yet
-        self._file_list = []
-        self._current_image_idx = 0
-        file_list = os.listdir(self._image_path)
-        for file in file_list:
-            is_image = '.png' in file
-            anno_exists = is_image and os.path.isfile(os.path.join(self._image_path,
-                                                                   file.split('.')[0] + "_anno.txt"))
-
-            if is_image and not anno_exists:
-                self._file_list.append(file)
-
-        self._model.init_inference()
-
-    def run_annotation(self):
-        """ Run the annotation itself, will annotation few images
-            every run to give the user the possibility to stop
-        """
-
-        max_index = min(self._current_image_idx + self._num_images_to_process, len(self._file_list))
-        for image_file in self._file_list[self._current_image_idx: max_index]:
-            print('Processing image', image_file)
-
-            radius_x = int(self._trigger_fov[0]/2.)
-            radius_y = int(self._trigger_fov[1]/2.)
-
-            # Pad image to be able to slide the triggerbot over the entire image
-            image = Image.open(os.path.join(self._image_path, image_file))
-            padded_image = Image.new(image.mode, (image.width + self._trigger_fov[1],
-                                                  image.height + self._trigger_fov[0]), (0, 0, 0))
-            padded_image.paste(image, (radius_x, radius_y))
-
-            # Collect the x (height) and y (width) CENTER coordinates
-            center_x_list = np.arange(0, self._aimbot_training_fov[0] + self._step_size_height, self._step_size_height)
-            center_y_list = np.arange(0, self._aimbot_training_fov[1] - self._step_size_width, self._step_size_width)
-            # Empty matrix to collect the triggerbot response
-            output = np.zeros((self._aimbot_training_fov[0],
-                               self._aimbot_training_fov[1]))
-
-            # Perform predictions in batches along x, much faster!
-            for y in center_y_list:
-
-                image_batch = np.zeros((len(center_x_list), self._trigger_fov[0],
-                                        self._trigger_fov[1], 3))
-                for idx, x in enumerate(center_x_list):
-                    crop = np.array(padded_image.crop((y - radius_y + radius_y, x - radius_x + radius_x,
-                                                       y + radius_y + radius_y, x + radius_x + radius_x)))
-
-                    image_batch[idx, :, :, :] = crop
-                is_on_target = self._model.predict_is_on_target(image_batch)
-
-                for idx, x in enumerate(center_x_list):
-                    if is_on_target[idx]:
-                        half_step_height = int(self._step_size_height / 2.)
-                        half_step_width = int(self._step_size_width / 2.)
-                        output[x - half_step_height:x + half_step_height, y - half_step_width:y + half_step_width] = 255
-
-            # Find contours in response map
-            cnts, hierarchy = cv.findContours(output.astype(np.uint8), cv.RETR_EXTERNAL,
-                                              cv.CHAIN_APPROX_SIMPLE)
-            # And create bounding boxes for them
-            bounding_boxes = [cv.boundingRect(c) for c in cnts]
-
-            # Switch to uint8, opencv needs it
-            image = np.array(image).astype(np.uint8)
-
-            # Filter out very small boxes
-            filtered_boxes = []
-            for box in bounding_boxes:
-                if box[2] >= 2 * self._step_size_width and box[3] >= 2 * self._step_size_height:
-                    filtered_boxes.append(box)
-
-            # Create annotation files
-            if filtered_boxes:
-                anno_file_name = os.path.join(self._image_path, image_file.split('.')[0] + "_anno.txt")
-                with open(anno_file_name, 'w') as file:
-                    for box in filtered_boxes:
-                        # Left, Top, Right, Bottom
-                        file.write(str(box[0]) + ' ' + str(box[1]) + ' ' + str(box[2]) + ' ' + str(box[3]) + '\n')
-
-                # And finally save the annotated image for manual inspection
-                for box in filtered_boxes:
-                    cv.rectangle(image, (int(box[0]), int(box[1])),
-                                    (int(box[0] + box[2]), int(box[1] + box[3])), (0, 255, 0), 2)
-
-                cv.imwrite(os.path.join(self._annotated_image_path, image_file), image)
-
-            # If there are none, remove the file
-            else:
-                os.remove(os.path.join(self._image_path, image_file))
-
-            self._current_image_idx += 1
-
-    def shutdown_annotation(self):
-        """ Shutdown the trigger model for annotation """
-
-        self._model.shutdown_inference()
 
 
 def _get_latest_inc(path):
@@ -234,6 +146,24 @@ def _get_latest_inc(path):
         return int(re.search('(?P<inc>\d+).png$', max(images, key=os.path.getctime)).group('inc'))
 
 
+def _get_annotations_and_images(path):
+
+    annotations = [os.path.join(path, file) for file in os.listdir(path) if 'anno.txt' in file]
+
+    anno_images = []
+    # Fill the list in the format [image_name, [(box1), (box2), ...]]
+    for anno in annotations:
+
+        image_name = anno.split('_anno')[0] + '.png'
+        with open(anno) as file:
+            # Read all boxes
+            anno_list = []
+            for line in file.readlines():
+                anno_list.append(tuple(map(int, line.split(' '))))
+            # And add image + boxes
+            anno_images.append([image_name, anno_list])
+
+    return anno_images
 
 
 

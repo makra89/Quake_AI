@@ -30,7 +30,9 @@
 
 from quake_ai.core.trigger_bot_training import TriggerBotTrainer
 from quake_ai.core.trigger_bot_inference import TriggerBot
-from quake_ai.core.aim_bot_training import AimbotTrainer, ImageAnnotator
+from quake_ai.core.aim_bot_training import AimbotTrainer
+from quake_ai.core.aim_bot_inference import Aimbot
+from quake_ai.core.image_annotation import ImageAnnotator
 from quake_ai.utils.screen_capturing import ScreenCapturer
 from quake_ai.utils.threading import NonBlockingTask, BlockingTask
 from quake_ai.core.config import QuakeAiConfig
@@ -63,6 +65,9 @@ class System:
 
         self._aimbot_trainer = AimbotTrainer(config=self._config,
                                              screenshot_func=self._screen_capturer.make_aimbot_train_screenshot)
+
+        self._aimbot = Aimbot(config=self._config,
+                              screenshot_func=self._screen_capturer.make_aimbot_inference_screenshot)
 
         self._image_annotator = ImageAnnotator(config=self._config)
 

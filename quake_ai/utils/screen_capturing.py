@@ -67,6 +67,7 @@ class ScreenCapturer:
         self._window_rect = None  # Window of main process (without bars)
         self._trigger_fov_rect = None  # Window for trigger bot fov
         self._aimbot_train_fov_rect = None  # Window for aimbot trainining fov
+        self._aimbot_inf_fov_rect = None  # Window for aimbot trainining fov
         self._mss_handle = None
 
     def startup(self):
@@ -98,10 +99,16 @@ class ScreenCapturer:
                                                                              trigger_fov_width)
 
             # Calculate window for aimbot training fov
-            aimbot_train_height = self._config.aimbot_train_image_fov[0]
-            aimbot_train_width = self._config.aimbot_train_image_fov[1]
+            aimbot_train_height = self._config.aimbot_train_image_size
+            aimbot_train_width = self._config.aimbot_train_image_size
             self._aimbot_train_fov_rect = self._window_rect.calc_center_crop_rect(aimbot_train_height,
                                                                                   aimbot_train_width)
+
+            # Calculate window for aimbot inference fov
+            aimbot_inf_height = self._config.aimbot_train_image_size
+            aimbot_inf_width = self._config.aimbot_train_image_size
+            self._aimbot_inf_fov_rect = self._window_rect.calc_center_crop_rect(aimbot_inf_height,
+                                                                                aimbot_inf_width)
 
             self._mss_handle = mss.mss()
 
@@ -136,6 +143,15 @@ class ScreenCapturer:
         monitor = {"top": self._aimbot_train_fov_rect.top, "left": self._aimbot_train_fov_rect.left,
                    "width": self._aimbot_train_fov_rect.right - self._aimbot_train_fov_rect.left,
                    "height": self._aimbot_train_fov_rect.bottom - self._aimbot_train_fov_rect.top}
+
+        return pil_frombytes(self._mss_handle.grab(monitor))
+
+    def make_aimbot_inference_screenshot(self):
+        """ Make and return screenshot of the aimbot inference fov """
+
+        monitor = {"top": self._aimbot_inf_fov_rect.top, "left": self._aimbot_inf_fov_rect.left,
+                   "width": self._aimbot_inf_fov_rect.right - self._aimbot_inf_fov_rect.left,
+                   "height": self._aimbot_inf_fov_rect.bottom - self._aimbot_inf_fov_rect.top}
 
         return pil_frombytes(self._mss_handle.grab(monitor))
 
