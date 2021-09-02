@@ -139,10 +139,6 @@ class QuakeAiConfig:
         return self._config['AIMBOT-TRAINING']['capture_key']
 
     @property
-    def aimbot_train_darknet_weights_path(self):
-        return self._config['AIMBOT-TRAINING']['darknet_weights']
-
-    @property
     def annotator_num_images_per_step(self):
         return int(self._config['AIMBOT-ANNOTATION']['num_images_per_step'])
 
@@ -166,8 +162,7 @@ class QuakeAiConfig:
         # Default model lies in the repository itself
         default_trigger_model_path = join(dirname(dirname(dirname(__file__))), 'default_models\\trigger_model.hdf5')
         default_aimbot_model_path = join(dirname(dirname(dirname(__file__))), 'default_models\\aimbot_model.hdf5')
-        # Initial darknet weights for starting training
-        darknet_init_weights_path = join(dirname(dirname(dirname(__file__))), 'data\\init_weights_tiny\\yolov3-tiny.tf')
+
         # Path to default class list
         default_classes_path = join(dirname(dirname(dirname(__file__))), 'default_models\\quake.names')
 
@@ -193,7 +188,6 @@ class QuakeAiConfig:
                                      'batch_size': '30',
                                      'shuffle_size': '100',
                                      'num_epochs': '50',
-                                     'darknet_weights': darknet_init_weights_path
                                      }
 
         config['AIMBOT-ANNOTATION'] = {'num_images_per_step': 10,

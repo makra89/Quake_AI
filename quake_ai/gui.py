@@ -97,6 +97,8 @@ class QuakeAiGui:
                   command=self._run_aimbot_capture_task).pack(pady=10)
         tk.Button(aimbot_training, text="Annotate Images for Aimbot", font=('Helvetica', 10),
                   command=self._run_aimbot_annotation_task).pack(pady=10)
+        tk.Button(aimbot_training, text="Train Aimbot", font=('Helvetica', 10),
+                  command=self._run_aimbot_training_task).pack(pady=10)
         aimbot_training.pack(ipadx=118)
 
         tk.Button(self._main_frame, text="Stop Current Task", font=('Helvetica', 10),
@@ -141,6 +143,16 @@ class QuakeAiGui:
             self._running_task = self._system.aimbot_annotation_task
             self._running_thread = threading.Thread(target=self._running_task.start)
             self._status_text.set('Aimbot - Annotating')
+            self._running_thread.start()
+
+    def _run_aimbot_training_task(self):
+        """ Run image capturing task for aimbot """
+
+        if self._running_task is None and self._running_thread is None:
+
+            self._running_task = self._system.aimbot_training_task
+            self._running_thread = threading.Thread(target=self._running_task.start)
+            self._status_text.set('Aimbot - Training')
             self._running_thread.start()
 
     def _run_trigger_training_task(self):
