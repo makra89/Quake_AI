@@ -32,7 +32,7 @@ import numpy as np
 import pyautogui as pgui
 import time
 
-from quake_ai.utils.model_helpers import TriggerModel
+from quake_ai.utils.trigger_model import TriggerModel
 
 
 class TriggerBot:

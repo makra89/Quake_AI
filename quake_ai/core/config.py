@@ -82,13 +82,6 @@ class QuakeAiConfig:
     def trigger_train_lr(self):
         return float(self._config['TRIGGERBOT-TRAINING']['learning_rate'])
 
-    @trigger_train_lr.setter
-    def trigger_train_lr(self, value):
-        self._config['TRIGGERBOT-TRAINING']['learning_rate'] = str(value)
-        # Write changes to file
-        with open(self._path, 'w') as file:
-            self._config.write(file)
-
     @property
     def trigger_train_batch_size(self):
         return int(self._config['TRIGGERBOT-TRAINING']['batch_size'])
@@ -110,13 +103,44 @@ class QuakeAiConfig:
         return self._config['TRIGGERBOT-TRAINING']['capture_key_neg']
 
     @property
-    def aimbot_train_image_fov(self):
-        return int(self._config['AIMBOT-TRAINING']['image_height']), \
-               int(self._config['AIMBOT-TRAINING']['image_width'])
+    def aimbot_inference_image_size(self):
+        return int(self._config['AIMBOT']['image_size'])
+
+    @property
+    def aimbot_model_path(self):
+        return self._config['AIMBOT']['model_path']
+
+    @property
+    def aimbot_class_file(self):
+        return self._config['AIMBOT']['class_file']
+
+    @property
+    def aimbot_train_image_size(self):
+        return int(self._config['AIMBOT-TRAINING']['image_size'])
+
+    @property
+    def aimbot_train_lr(self):
+        return float(self._config['AIMBOT-TRAINING']['learning_rate'])
+
+    @property
+    def aimbot_train_batch_size(self):
+        return int(self._config['AIMBOT-TRAINING']['batch_size'])
+
+    @property
+    def aimbot_train_shuffle_size(self):
+        return int(self._config['AIMBOT-TRAINING']['shuffle_size'])
+
+    @property
+    def aimbot_train_epochs(self):
+        return int(self._config['AIMBOT-TRAINING']['num_epochs'])
 
     @property
     def aimbot_train_capture_key(self):
         return self._config['AIMBOT-TRAINING']['capture_key']
+
+    @property
+    def aimbot_train_darknet_weights_path(self):
+        return self._config['AIMBOT-TRAINING']['darknet_weights']
 
     @property
     def annotator_num_images_per_step(self):
@@ -141,22 +165,36 @@ class QuakeAiConfig:
 
         # Default model lies in the repository itself
         default_trigger_model_path = join(dirname(dirname(dirname(__file__))), 'default_models\\trigger_model.hdf5')
+        default_aimbot_model_path = join(dirname(dirname(dirname(__file__))), 'default_models\\aimbot_model.hdf5')
+        # Initial darknet weights for starting training
+        darknet_init_weights_path = join(dirname(dirname(dirname(__file__))), 'data\\init_weights_tiny\\yolov3-tiny.tf')
+        # Path to default class list
+        default_classes_path = join(dirname(dirname(dirname(__file__))), 'default_models\\quake.names')
 
         config['TRIGGERBOT'] = {'model_path': default_trigger_model_path,
                                 'fov_height': '100',
                                 'fov_width': '100',
                                 'aim_size': '4'}
 
-        config['TRIGGERBOT-TRAINING'] = {'learning_rate': '0.01',
+        config['TRIGGERBOT-TRAINING'] = {'learning_rate': '0.001',
                                          'batch_size': '30',
                                          'shuffle_size': '100',
-                                         'num_epochs': '20',
+                                         'num_epochs': '50',
                                          'capture_key_pos': 'e',
                                          'capture_key_neg': 'r'}
 
-        config['AIMBOT-TRAINING'] = {'image_height': '300',
-                                     'image_width': '530',
-                                     'capture_key': 'e'}
+        config['AIMBOT'] = {'image_size': '416',
+                            'model_path': default_aimbot_model_path,
+                            'class_file': default_classes_path}
+
+        config['AIMBOT-TRAINING'] = {'image_size': '416',
+                                     'capture_key': 'e',
+                                     'learning_rate': '0.001',
+                                     'batch_size': '30',
+                                     'shuffle_size': '100',
+                                     'num_epochs': '50',
+                                     'darknet_weights': darknet_init_weights_path
+                                     }
 
         config['AIMBOT-ANNOTATION'] = {'num_images_per_step': 10,
                                        'step_size_height': 4,
