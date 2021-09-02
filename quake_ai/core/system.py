@@ -104,6 +104,11 @@ class System:
                                                                     self._image_annotator.startup_annotation],
                                                     shutdown_task_list=[self._image_annotator.shutdown_annotation])
 
+        self._aimbot_training_task = BlockingTask(self._aimbot_trainer.train_epoch,
+                                                  init_task_list=[self._config.update_from_file,
+                                                                  self._aimbot_trainer.init_training],
+                                                  shutdown_task_list=[self._aimbot_trainer.shutdown_training])
+
     @property
     def trigger_capture_task(self):
         return self._trigger_capture_task
@@ -111,6 +116,10 @@ class System:
     @property
     def aimbot_capture_task(self):
         return self._aimbot_capture_task
+
+    @property
+    def aimbot_training_task(self):
+        return self._aimbot_training_task
 
     @property
     def aimbot_annotation_task(self):
