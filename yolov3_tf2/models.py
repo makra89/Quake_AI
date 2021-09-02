@@ -23,7 +23,7 @@ from .utils import broadcast_iou
 # TODO: Add these values to config?
 YOLO_MAX_BOXES = 10
 YOLO_IOU_THRESHOLD = 0.5
-YOLO_SCORE_THRESHOLD = 0.4
+YOLO_SCORE_THRESHOLD = 0.5
 
 yolo_anchors = np.array([(10, 13), (16, 30), (33, 23), (30, 61), (62, 45),
                          (59, 119), (116, 90), (156, 198), (373, 326)],
@@ -195,7 +195,11 @@ def yolo_nms(outputs, anchors, masks, classes):
     confidence = tf.concat(c, axis=1)
     class_probs = tf.concat(t, axis=1)
 
-    scores = confidence * class_probs
+    # If we only have one class, do not multiply by class_prob (always 0.5)
+    if classes == 1:
+        scores = confidence
+    else:
+        scores = confidence * class_probs
 
     dscores = tf.squeeze(scores, axis=0)
     scores = tf.reduce_max(dscores,[1])

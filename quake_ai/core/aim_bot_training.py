@@ -34,7 +34,6 @@ import numpy as np
 import re
 from sklearn.model_selection import train_test_split
 
-import yolov3_tf2.dataset as dataset
 from quake_ai.utils.aimbot_model import TrainableAimbotModel
 
 

@@ -35,10 +35,9 @@ import tensorflow as tf
 import tensorflow.keras as keras
 import os
 import datetime
-from yolov3_tf2.utils import draw_outputs
-import cv2
 import numpy as np
 from PIL import Image
+
 from quake_ai.utils.model_utils import ImageLogger
 
 
@@ -69,24 +68,11 @@ class AimbotModel:
         self._model.load_weights(self._model_path)
 
     def predict(self, image):
-        """ Returns true if aim is on-target """
 
         image_proc = np.expand_dims(image, axis=0)
         image_proc = self._preprocess_image(image_proc)
-        image_proc2 = self._preprocess_image(image)
-        boxes, scores, classes, nums = self._model(image_proc)
-        #print(image_proc)
-        img = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        image_proc2 = cv2.cvtColor(image_proc2.numpy(), cv2.COLOR_RGB2BGR)
-        img = draw_outputs(img, (boxes, scores, classes, nums), self._class_names)
-        #print(img)
-        cv2.imshow("Bla", img)
-        #cv2.imshow("Bla2", image_proc2)
-        cv2.waitKey(0)
-        print(scores)
-        #print(classes)
-        print(nums)
 
+        boxes, scores, classes, nums = self._model(image_proc)
 
     def shutdown_inference(self):
 
@@ -119,16 +105,7 @@ class TrainableAimbotModel(AimbotModel):
 
         self._training = True
         self._model = YoloV3Tiny(size=self._config.aimbot_train_image_size, channels=3, classes=1, training=True)
-        #self._model.load_weights(self._config.aimbot_train_darknet_weights_path)
-        print("Weigths loaded")
-        print("Weigths loaded")
-        print("Weigths loaded")
-        print("Weigths loaded")
-        print("Weigths loaded")
-        print("Weigths loaded")
-        print("Weigths loaded")
-        print("Weigths loaded")
-        print("Weigths loaded")
+
         self._optimizer = keras.optimizers.Adam(lr=0.001)
         self._loss = [YoloLoss(yolo_tiny_anchors[mask], classes=1) for mask in yolo_tiny_anchor_masks]
         self._model.compile(optimizer=self._optimizer, loss=self._loss)

@@ -29,36 +29,5 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from quake_ai import QuakeAiGui
-from quake_ai.core.aim_bot_training import AimbotTrainer
-from quake_ai.core.aim_bot_inference import Aimbot
-from quake_ai.utils.screen_capturing import ScreenCapturer
-from quake_ai.core.config import QuakeAiConfig
-#quake_ai = QuakeAiGui()
 
-
-
-config = QuakeAiConfig('../test/config.ini')
-
-# Training
-model = AimbotTrainer(config)
-model.init_training()
-model.train_epoch()
-model.shutdown_training()
-import os
-
-#capturer = ScreenCapturer(config)
-#capturer.startup()
-#model = Aimbot(config, capturer.make_aimbot_inference_screenshot)
-#model.init_inference()
-#while True:
-#    model.run_inference_screen()
-
-#model = Aimbot(config)
-#model.init_inference()
-#images = [file for file in os.listdir(os.path.abspath('../test/training/aimbot_images')) if '.png' in file]
-#print(images)
-#for image in images:
-#    model.run_inference(os.path.join('../test/training/aimbot_images', image))
-
-
-
+quake_ai = QuakeAiGui()
