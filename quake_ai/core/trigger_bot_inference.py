@@ -29,7 +29,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import numpy as np
-import pyautogui as pgui
+import pydirectinput
 import time
 
 from quake_ai.utils.trigger_model import TriggerModel
@@ -68,9 +68,9 @@ class TriggerBot:
         screenshot = np.expand_dims(np.array(self._screenshot_func()), axis=0)
 
         if self._model.predict_is_on_target(screenshot):
-            pgui.mouseDown()
-            time.sleep(pgui.PAUSE)
-            pgui.mouseUp()
+            pydirectinput.mouseDown()
+            time.sleep(0.2)
+            pydirectinput.mouseUp()
 
     def shutdown_inference(self):
         """ Stop the inference """

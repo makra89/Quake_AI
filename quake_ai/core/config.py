@@ -115,6 +115,10 @@ class QuakeAiConfig:
         return self._config['AIMBOT']['class_file']
 
     @property
+    def aimbot_activation_key(self):
+        return self._config['AIMBOT']['activation_key']
+
+    @property
     def aimbot_train_image_size(self):
         return int(self._config['AIMBOT-TRAINING']['image_size'])
 
@@ -161,7 +165,7 @@ class QuakeAiConfig:
 
         # Default model lies in the repository itself
         default_trigger_model_path = join(dirname(dirname(dirname(__file__))), 'default_models\\trigger_model.hdf5')
-        default_aimbot_model_path = join(dirname(dirname(dirname(__file__))), 'default_models\\aimbot_model.hdf5')
+        default_aimbot_model_path = join(dirname(dirname(dirname(__file__))), 'default_models\\aimbot_weights.hdf5')
 
         # Path to default class list
         default_classes_path = join(dirname(dirname(dirname(__file__))), 'default_models\\quake.names')
@@ -180,7 +184,8 @@ class QuakeAiConfig:
 
         config['AIMBOT'] = {'image_size': '416',
                             'model_path': default_aimbot_model_path,
-                            'class_file': default_classes_path}
+                            'class_file': default_classes_path,
+                            'activation_key': 'e'}
 
         config['AIMBOT-TRAINING'] = {'image_size': '416',
                                      'capture_key': 'e',
