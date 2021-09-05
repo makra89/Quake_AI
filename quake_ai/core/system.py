@@ -67,7 +67,8 @@ class System:
                                              screenshot_func=self._screen_capturer.make_aimbot_train_screenshot)
 
         self._aimbot = Aimbot(config=self._config,
-                              screenshot_func=self._screen_capturer.make_aimbot_inference_screenshot)
+                              screenshot_func=self._screen_capturer.make_aimbot_inference_screenshot,
+                              coord_trafo_func=self._screen_capturer.query_pos_diff_to_aim)
 
         self._image_annotator = ImageAnnotator(config=self._config)
 
@@ -109,6 +110,13 @@ class System:
                                                                   self._aimbot_trainer.init_training],
                                                   shutdown_task_list=[self._aimbot_trainer.shutdown_training])
 
+        self._aimbot_inference_task = BlockingTask(self._aimbot.run_inference,
+                                                   init_task_list=[self._config.update_from_file,
+                                                                   self._screen_capturer.startup,
+                                                                   self._aimbot.init_inference],
+                                                   shutdown_task_list=[self._aimbot.shutdown_inference,
+                                                                       self._screen_capturer.shutdown])
+
     @property
     def trigger_capture_task(self):
         return self._trigger_capture_task
@@ -120,6 +128,10 @@ class System:
     @property
     def aimbot_training_task(self):
         return self._aimbot_training_task
+
+    @property
+    def aimbot_inference_task(self):
+        return self._aimbot_inference_task
 
     @property
     def aimbot_annotation_task(self):

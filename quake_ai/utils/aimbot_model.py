@@ -69,10 +69,10 @@ class AimbotModel:
 
     def predict(self, image):
 
-        image_proc = np.expand_dims(image, axis=0)
-        image_proc = self._preprocess_image(image_proc)
+        image = np.expand_dims(image, axis=0)
+        image = self._preprocess_image(image)
 
-        boxes, scores, classes, nums = self._model(image_proc)
+        return self._model(image)
 
     def shutdown_inference(self):
 

@@ -105,8 +105,8 @@ class ScreenCapturer:
                                                                                   aimbot_train_width)
 
             # Calculate window for aimbot inference fov
-            aimbot_inf_height = self._config.aimbot_train_image_size
-            aimbot_inf_width = self._config.aimbot_train_image_size
+            aimbot_inf_height = self._config.aimbot_inference_image_size
+            aimbot_inf_width = self._config.aimbot_inference_image_size
             self._aimbot_inf_fov_rect = self._window_rect.calc_center_crop_rect(aimbot_inf_height,
                                                                                 aimbot_inf_width)
 
@@ -154,6 +154,23 @@ class ScreenCapturer:
                    "height": self._aimbot_inf_fov_rect.bottom - self._aimbot_inf_fov_rect.top}
 
         return pil_frombytes(self._mss_handle.grab(monitor))
+
+    def query_pos_diff_to_aim(self, x_pos, y_pos):
+        """ Transform aimbot x/y coordinates to screen coordinates and return relative position to the middle of the
+            game window.
+            Caution: x is along width, y along height for input coordinates starting from left lower edge of fov
+            Will return position offsets:
+                - coord system starting aim position
+                - x axis goes to the right
+                - y axis goes down
+        """
+
+        x_screen = x_pos + self._aimbot_inf_fov_rect.left
+        y_screen = self._config.aimbot_inference_image_size - y_pos + self._aimbot_inf_fov_rect.top
+
+        rel_x_screen = x_screen - 0.5 * (self._aimbot_inf_fov_rect.left + self._aimbot_inf_fov_rect.right)
+        rel_y_screen = y_screen - 0.5 * (self._aimbot_inf_fov_rect.top + self._aimbot_inf_fov_rect.bottom)
+        return -rel_x_screen, rel_y_screen  # Measured from aim position
 
 
 # From https://python-mss.readthedocs.io/examples.html#bgra-to-rgb
