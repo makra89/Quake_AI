@@ -64,6 +64,8 @@ class ImageLogger:
         """ Will be performed for every batch call (but only two images will be saved) """
 
         with self.file_writer.as_default():
+
+            image_draw = image
             if self._draw_bbox:
 
                 # Reorder axis, tensorflow expects [ymin, xmin, ymax, xmax]
@@ -71,11 +73,11 @@ class ImageLogger:
                 # Red bboxes
                 colors = np.array([[1.0, 0.0, 0.0]])
                 # Draw bboxes
-                image = tf.image.draw_bounding_boxes(
-                    image, bboxes, colors, name=None)
+                image_draw = tf.image.draw_bounding_boxes(
+                    image_draw, bboxes, colors, name=None)
 
             # Log image
-            tf.summary.image(self.name, image,
+            tf.summary.image(self.name, image_draw,
                              step=0,  # Always overwrite images, do not save
                              max_outputs=self._max_images)
 

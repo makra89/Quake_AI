@@ -79,6 +79,7 @@ class TriggerModel:
     @tf.function
     def _preprocess_image(self, image):
 
+        image = tf.image.rgb_to_grayscale(image)
         image = tf.cast(image, tf.float32)
         image = tf.multiply(image, self._aim_mask.mask)
         image = (image - tf.reduce_mean(image)) / tf.math.reduce_std(image)
@@ -173,7 +174,7 @@ class TrainableTriggerModel(TriggerModel):
         self._model.compile(optimizer=self._optimizer,
                             loss='categorical_crossentropy', metrics=['accuracy'])
         self._current_epoch = 0  # relative to initialize time
-        self._output_weights = os.path.join(os.path.dirname(model_path), 'aimbot_weights.hdf5')
+        self._output_weights = os.path.join(os.path.dirname(model_path), 'trigger_weights.hdf5')
 
         #####################################
         #        Training Callbacks         #
@@ -183,7 +184,7 @@ class TrainableTriggerModel(TriggerModel):
         self._training_callbacks.append(keras.callbacks.ModelCheckpoint(self._model_path, monitor='val_loss',
                                                                         verbose=1, save_best_only=True, mode='min'))
         self._training_callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5,
-                                                                          patience=1, min_lr=1e-7, verbose=1))
+                                                                          patience=20, min_lr=1e-7, verbose=1))
         self._training_callbacks.append(keras.callbacks.ModelCheckpoint(self._output_weights, monitor='val_loss',
                                                                         verbose=1, save_weights_only=True,
                                                                         save_best_only=True, mode='min'))
@@ -192,7 +193,7 @@ class TrainableTriggerModel(TriggerModel):
                               "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
         self._training_callbacks.append(tf.keras.callbacks.TensorBoard(log_dir=logdir))
 
-        self._image_logger = ImageLogger(name='Images', logdir=logdir, max_images=2)
+        self._image_logger = ImageLogger(name='Images', logdir=logdir, max_images=2, draw_bbox=False)
 
     def fit_num_epochs(self, data_train, data_test):
         """ Fit for a number of epochs (see config). Model will be reloaded if existing to keep on training.
