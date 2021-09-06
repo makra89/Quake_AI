@@ -65,7 +65,7 @@ class ImageLogger:
 
         with self.file_writer.as_default():
             if self._draw_bbox:
-                print(image)
+
                 # Reorder axis, tensorflow expects [ymin, xmin, ymax, xmax]
                 bboxes = tf.gather(label[:, :, :4], [1, 0, 3, 2], axis=2)
                 # Red bboxes
