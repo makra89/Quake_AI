@@ -29,6 +29,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from abc import ABC, abstractmethod
+import threading
 
 
 class Task(ABC):
@@ -73,25 +74,35 @@ class NonBlockingTask(Task):
         """
 
         super(NonBlockingTask, self).__init__(main_task, init_task_list, shutdown_task_list)
+        self._mutex = threading.Lock()
 
     def start(self):
         """ Start the task """
 
         if not self._running:
+
             # When state switches to running --> do init tasks once
+            self._mutex.acquire()
+
             for init_task in self._init_task_list:
                 init_task()
             self._running = True
             self._main_task()
 
+            self._mutex.release()
+
     def stop(self):
         """ Stop the task (since it returns immediately this is not really necessary) """
 
         if self._running:
+            self._mutex.acquire()
+
             # State switches from running to stopped --> do shutdown tasks
             for shutdown_task in self._shutdown_task_list:
                 shutdown_task()
             self._running = False
+
+            self._mutex.release()
 
 
 class BlockingTask(Task):
@@ -113,16 +124,20 @@ class BlockingTask(Task):
         """
 
         super(BlockingTask, self).__init__(main_task, init_task_list, shutdown_task_list)
+        self._mutex = threading.Lock()
 
     def start(self):
         """ Start the task """
 
         if not self._running:
             # Do init tasks once when we switch from stopped --> running
+            self._mutex.acquire()
             for init_task in self._init_task_list:
                 init_task()
 
             self._running = True
+            self._mutex.release()
+
             while self._running:
                 self._main_task()
 
@@ -133,4 +148,6 @@ class BlockingTask(Task):
     def stop(self):
         """ Stop the task (I think this is not really thread-safe what I am doing here """
 
+        self._mutex.acquire()
         self._running = False
+        self._mutex.release()
