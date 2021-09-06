@@ -52,17 +52,29 @@ class _AimMask:
 class ImageLogger:
     """ Utility class for logging images in tensorboard """
 
-    def __init__(self, name, logdir, max_images=2):
+    def __init__(self, name, logdir, max_images=2, draw_bbox=False):
         """ Initialize it, creates image tab named "name" in tensorboard """
 
         self.file_writer = tf.summary.create_file_writer(logdir)
         self.name = name
         self._max_images = max_images
+        self._draw_bbox = draw_bbox
 
     def __call__(self, image, label):
         """ Will be performed for every batch call (but only two images will be saved) """
 
         with self.file_writer.as_default():
+            if self._draw_bbox:
+                print(image)
+                # Reorder axis, tensorflow expects [ymin, xmin, ymax, xmax]
+                bboxes = tf.gather(label[:, :, :4], [1, 0, 3, 2], axis=2)
+                # Red bboxes
+                colors = np.array([[1.0, 0.0, 0.0]])
+                # Draw bboxes
+                image = tf.image.draw_bounding_boxes(
+                    image, bboxes, colors, name=None)
+
+            # Log image
             tf.summary.image(self.name, image,
                              step=0,  # Always overwrite images, do not save
                              max_outputs=self._max_images)

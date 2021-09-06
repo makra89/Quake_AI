@@ -130,7 +130,7 @@ class TrainableAimbotModel(AimbotModel):
                               "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
         self._training_callbacks.append(tf.keras.callbacks.TensorBoard(log_dir=logdir))
 
-        self._image_logger = ImageLogger(name='Images', logdir=logdir, max_images=2)
+        self._image_logger = ImageLogger(name='Images', logdir=logdir, max_images=2, draw_bbox=True)
 
     def fit_num_epochs(self, data_train, data_test):
         """ Fit for a number of epochs (see config). Model will be reloaded if existing to keep on training.
@@ -174,10 +174,10 @@ class TrainableAimbotModel(AimbotModel):
         """
 
         dataset = load_tfrecord_dataset(tfrecord_path, self._class_file_path)
+
         # Augmentation
-        # TODO: Properly implement augmentation!
-        #if augment:
-           # dataset = dataset.map(self._augment, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        if augment:
+            dataset = dataset.map(self._augment, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         # Set the number of datapoints you want to load and shuffle
         if shuffle:
@@ -187,10 +187,12 @@ class TrainableAimbotModel(AimbotModel):
         dataset = dataset.batch(self._config.aimbot_train_batch_size)
 
         dataset = dataset.map(lambda x, y: (
-            self._preprocess_image(x),
-            transform_targets(y, yolo_tiny_anchors, yolo_tiny_anchor_masks, self._config.aimbot_train_image_size)))
+            self._preprocess_image(x), y))
 
         dataset = dataset.map(self._image_logger, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+        dataset = dataset.map(lambda x, y: (
+            x, transform_targets(y, yolo_tiny_anchors, yolo_tiny_anchor_masks, self._config.aimbot_train_image_size)))
 
         dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
@@ -198,11 +200,11 @@ class TrainableAimbotModel(AimbotModel):
 
     @tf.function
     def _augment(self, image, label):
-        """ Perform image augmentation, I think we could do more here """
+        """ Perform image augmentation """
+        # TODO: Implement more image augmentations!
 
-        image = tf.image.random_flip_left_right(image)
-        image = tf.image.random_flip_up_down(image)
-        image = tf.image.random_brightness(image, max_delta=0.2)
+        image = tf.image.random_brightness(image, 0.2)
+        image = tf.image.random_hue(image, 0.2)
 
         return image, label
 
