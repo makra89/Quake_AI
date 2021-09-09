@@ -99,9 +99,12 @@ class QuakeAiGui:
                   command=self._run_aimbot_annotation_task).pack(pady=10)
         tk.Button(aimbot_training, text="Train Aimbot", font=('Helvetica', 10),
                   command=self._run_aimbot_training_task).pack(pady=10)
-        tk.Button(aimbot_training, text="Start Aimbot", font=('Helvetica', 10),
+        aimbot_training.pack(ipadx=115)
+
+        aimbot = tk.LabelFrame(self._main_frame, text="Aimbot", font=('Helvetica', 10), bg='white')
+        tk.Button(aimbot, text="Start Aimbot", font=('Helvetica', 10),
                   command=self._run_aimbot_inference_task).pack(pady=10)
-        aimbot_training.pack(ipadx=118)
+        aimbot.pack(ipadx=159)
 
         tk.Button(self._main_frame, text="Stop Current Task", font=('Helvetica', 10),
                   command=self._stop_current_task).pack(pady=10)

@@ -94,7 +94,7 @@ class AimbotTrainer:
         # Only initialize once!
         if self._model is None:
             self._model = TrainableAimbotModel(self._config, self._fov,
-                                                os.path.join(self._model_root_path, 'aimbot_model.hdf5'))
+                                                os.path.join(self._model_root_path, 'aimbot_model.tf'))
 
         if not os.path.isfile(self._train_data_tfrecord_path) and not os.path.isfile(self._test_data_tfrecord_path):
             # Only create if not existing
@@ -147,19 +147,19 @@ def _get_latest_inc(path):
 
 def _get_annotations_and_images(path):
 
-    annotations = [os.path.join(path, file) for file in os.listdir(path) if 'anno.txt' in file]
+    annotations = [os.path.join(path, file) for file in os.listdir(path) if ('.txt' in file and 'classes' not in file)]
 
     anno_images = []
     # Fill the list in the format [image_name, [(box1), (box2), ...]]
     for anno in annotations:
 
-        image_name = anno.split('_anno')[0] + '.png'
+        image_name = anno.split('.')[0] + '.png'
         with open(anno) as file:
             # Read all boxes
             anno_list = []
             for line in file.readlines():
-                anno_list.append(tuple(map(int, line.split(' '))))
-            # And add image + boxes
+                anno_list.append(tuple(map(float, line.split(' ')[:])))
+            # And add image + boxes + classes
             anno_images.append([image_name, anno_list])
 
     return anno_images

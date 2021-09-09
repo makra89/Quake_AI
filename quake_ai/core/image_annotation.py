@@ -48,7 +48,6 @@ class ImageAnnotator:
 
         self._config = config
         self._image_path = os.path.join(self._config.training_env_path, 'aimbot_images')
-        self._annotated_image_path = os.path.join(self._image_path, 'annotated_images')
         self._model_path = config.trigger_model_path
         self._trigger_fov = config.trigger_fov
         self._aimbot_training_fov = (config.aimbot_train_image_size, config.aimbot_train_image_size)
@@ -63,10 +62,6 @@ class ImageAnnotator:
     def startup_annotation(self):
         """ Initialize the trigger model for annotation """
 
-        # Check if path for images already exists
-        if not os.path.exists(self._annotated_image_path):
-            os.makedirs(self._annotated_image_path)
-
         # Only initialize once!
         if self._model is None:
             self._model = TriggerModel(self._config, self._trigger_fov, self._model_path)
@@ -78,7 +73,7 @@ class ImageAnnotator:
         for file in file_list:
             is_image = '.png' in file
             anno_exists = is_image and os.path.isfile(os.path.join(self._image_path,
-                                                                   file.split('.')[0] + "_anno.txt"))
+                                                                   file.split('.')[0] + ".txt"))
 
             if is_image and not anno_exists:
                 self._file_list.append(file)
@@ -147,18 +142,27 @@ class ImageAnnotator:
 
             # Create annotation files
             if filtered_boxes:
-                anno_file_name = os.path.join(self._image_path, image_file.split('.')[0] + "_anno.txt")
+                anno_file_name = os.path.join(self._image_path, image_file.split('.')[0] + ".txt")
                 with open(anno_file_name, 'w') as file:
                     for box in filtered_boxes:
-                        # Left, Bottom, Width, Height
-                        file.write(str(box[0]) + ' ' + str(box[1]) + ' ' + str(box[2]) + ' ' + str(box[3]) + '\n')
 
-                # And finally save the annotated image for manual inspection
-                for box in filtered_boxes:
-                    cv.rectangle(image, (int(box[0]), int(box[1])),
-                                    (int(box[0] + box[2]), int(box[1] + box[3])), (0, 255, 0), 2)
+                        center_x = box[0] + 0.5 * box[2]
+                        center_y = box[1] + 0.5 * box[3]
+                        # Now find out if the enemy is on-target
+                        aim_x = self._aimbot_training_fov[0] / 2.
+                        aim_y = self._aimbot_training_fov[1] / 2.
+                        # Very simple heuristic, will lead to false-positives
+                        class_id = 0
+                        on_target_x = np.abs(center_x - aim_x) <= 0.4 * box[2]
+                        on_target_y = np.abs(center_y - aim_y) <= 0.4 * box[3]
+                        if on_target_x and on_target_y:
+                            class_id = 1
 
-                cv.imwrite(os.path.join(self._annotated_image_path, image_file), image)
+                        # Class, Left, Bottom, Width, Height
+                        file.write(str(class_id) + ' ' + str(center_x / self._aimbot_training_fov[0]) + ' '
+                                   + str(center_y / self._aimbot_training_fov[1])
+                                   + ' ' + str(box[2] / self._aimbot_training_fov[0]) + ' '
+                                   + str(box[3] / self._aimbot_training_fov[1]) + '\n')
 
             # If there are none, remove the file
             else:

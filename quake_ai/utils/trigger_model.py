@@ -31,7 +31,7 @@
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Concatenate, \
-    AveragePooling2D, Flatten, Dropout, Activation, Dense
+    AveragePooling2D, Flatten, Dropout, Activation, Dense, GlobalAveragePooling2D
 from tensorflow.keras.regularizers import l2
 import numpy as np
 import os
@@ -61,7 +61,7 @@ class TriggerModel:
     def init_inference(self):
         """ Initialize trigger bot inference"""
 
-        self._model = self._create_trigger_model(self._image_shape)
+        self._model = self._create_trigger_model()
         self._model.load_weights(self._model_path)
 
     def predict_is_on_target(self, image):
@@ -79,14 +79,13 @@ class TriggerModel:
     @tf.function
     def _preprocess_image(self, image):
 
-        image = tf.image.rgb_to_grayscale(image)
         image = tf.cast(image, tf.float32)
         image = tf.multiply(image, self._aim_mask.mask)
         image = (image - tf.reduce_mean(image)) / tf.math.reduce_std(image)
 
         return image
 
-    def _create_trigger_model(self, image_shape):
+    def _create_trigger_model(self, image_shape=(None, None)):
         """ Create the keras model itself (not compiled yet)
 
             The model itself is inspired by GoogleNet.
@@ -144,10 +143,9 @@ class TriggerModel:
         max_pool_2 = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same')(inception_2_output)
 
         # Output block
-        output_pool = AveragePooling2D(pool_size=(6, 6), strides=(1, 1), padding='same')(max_pool_2)
-        output_flat = Flatten()(output_pool)
-        output_dropout = Dropout(rate=0.2)(output_flat)
-        output_class = Dense(2, kernel_regularizer=l2(), activation='softmax')(output_dropout)
+        output_pool = GlobalAveragePooling2D()(max_pool_2)
+        output_dense = Dense(100, kernel_regularizer=l2(), activation='relu')(output_pool)
+        output_class = Dense(2, activation='softmax')(output_dense)
 
         # Construct the model itself
         model = keras.models.Model(inputs=image_input, outputs=output_class)
