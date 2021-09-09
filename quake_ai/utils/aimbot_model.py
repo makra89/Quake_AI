@@ -121,7 +121,7 @@ class TrainableAimbotModel(AimbotModel):
                                                                         verbose=1, save_weights_only=True,
                                                                         save_best_only=True, mode='min'))
         self._training_callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5,
-                                                                          patience=10, min_lr=1e-7, verbose=1))
+                                                                          patience=40, min_lr=1e-7, verbose=1))
 
         logdir = os.path.join(os.path.dirname(self._model_path),
                               "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
