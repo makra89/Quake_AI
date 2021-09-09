@@ -64,7 +64,7 @@ class AimbotModel:
     def init_inference(self):
         """ Initialize aimbot inference"""
 
-        self._model = YoloV3Tiny(channels=3, classes=2, training=False)
+        self._model = YoloV3Tiny(channels=3, classes=1, training=False)
         self._model.load_weights(self._model_path)
 
     def predict(self, image):
@@ -101,7 +101,7 @@ class TrainableAimbotModel(AimbotModel):
         super(TrainableAimbotModel, self).__init__(config, image_shape, model_path)
 
         self._training = True
-        self._model = YoloV3Tiny(channels=3, classes=2, training=True)
+        self._model = YoloV3Tiny(channels=3, classes=1, training=True)
         print(self._model.summary())
 
         self._optimizer = keras.optimizers.Adam(lr=0.001)
@@ -229,9 +229,9 @@ def build_example(image_path, label_list, class_map, image_size):
         ymin.append(float(obj[2] - 0.5 * obj[4]))
         xmax.append(float(obj[1] + 0.5 * obj[3]))
         ymax.append(float(obj[2] + 0.5 * obj[4]))
-        classes_text.append(class_map[int(obj[0])].encode('utf8'))
-        classes.append(int(obj[0]))
-        print(int(obj[0]))
+        # For now just stick with one class --> enemy
+        classes_text.append(class_map[0].encode('utf8'))
+        classes.append(0)
 
     example = tf.train.Example(features=tf.train.Features(feature={
         'image/height': tf.train.Feature(int64_list=tf.train.Int64List(value=[height])),

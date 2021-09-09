@@ -31,6 +31,7 @@
 import numpy as np
 import pydirectinput
 import time
+import cv2
 
 from quake_ai.utils.trigger_model import TriggerModel
 

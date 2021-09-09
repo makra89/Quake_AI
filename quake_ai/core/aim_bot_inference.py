@@ -35,7 +35,6 @@ import tkinter as tk
 import win32gui
 import win32con
 
-
 from quake_ai.utils.aimbot_model import AimbotModel
 
 
@@ -83,11 +82,7 @@ class Aimbot:
 
         if self._active:
 
-            # Hide overlay during screenshot taking
-            self._overlay.hide()
             screenshot = np.array(self._screenshot_func())
-            self._overlay.show()
-
             boxes, scores, classes, nums = self._model.predict(screenshot)
 
             current_min_dist = 1000
@@ -122,8 +117,7 @@ class Aimbot:
             else:
                 self._overlay.deactivate_rectangle()
 
-        else:
-            self._overlay.update()
+        self._overlay.update()
 
     def shutdown_inference(self):
         """ Stop the inference """
@@ -169,23 +163,14 @@ class Overlay:
 
         self._rect_active = True
         self._canvas.coords(self._rect, top_left[0], top_left[1], bottom_right[0], bottom_right[1])
-        self.show()
+        if self._rect_active:
+            self._canvas.itemconfigure(self._rect, state='normal')
 
     def deactivate_rectangle(self):
 
-        self.hide()
-        self._rect_active = False
-
-    def hide(self):
-
         if self._rect_active:
             self._canvas.itemconfigure(self._rect, state='hidden')
-        self._root.update()
-
-    def show(self):
-        if self._rect_active:
-            self._canvas.itemconfigure(self._rect, state='normal')
-        self._root.update()
+        self._rect_active = False
 
     def update(self):
 

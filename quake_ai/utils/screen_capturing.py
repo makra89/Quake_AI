@@ -29,7 +29,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import win32gui
-import mss
+import win32ui
+import win32con
+import numpy as np
 from PIL import Image
 
 
@@ -68,7 +70,6 @@ class ScreenCapturer:
         self._trigger_fov_rect = None  # Window for trigger bot fov
         self._aimbot_train_fov_rect = None  # Window for aimbot trainining fov
         self._aimbot_inf_fov_rect = None  # Window for aimbot trainining fov
-        self._mss_handle = None
 
     def startup(self):
         """ Attach ScreenCapturer to the Quake Live handle (if existing)
@@ -110,50 +111,35 @@ class ScreenCapturer:
             self._aimbot_inf_fov_rect = self._window_rect.calc_center_crop_rect(aimbot_inf_height,
                                                                                 aimbot_inf_width)
 
-            self._mss_handle = mss.mss()
-
     def shutdown(self):
         """ Is there anything to do with the process handle? """
 
         self._process_handle = None
         self._window_rect = None
-        self._mss_handle = None
-
-    def make_window_screenshot(self):
-        """ Make and return screenshot of the complete process window """
-
-        monitor = {"top": self._window_rect.top, "left": self._window_rect.left,
-                   "width": self._window_rect.right - self._window_rect.left,
-                   "height": self._window_rect.bottom - self._window_rect.top}
-
-        return pil_frombytes(self._mss_handle.grab(monitor))
 
     def make_trigger_screenshot(self):
         """ Make and return screenshot of the trigger bot fov """
 
-        monitor = {"top": self._trigger_fov_rect.top, "left": self._trigger_fov_rect.left,
-                   "width": self._trigger_fov_rect.right - self._trigger_fov_rect.left,
-                   "height": self._trigger_fov_rect.bottom - self._trigger_fov_rect.top}
-
-        return pil_frombytes(self._mss_handle.grab(monitor))
+        return self._screenshot(self._trigger_fov_rect.bottom - self._trigger_fov_rect.top,
+                                self._trigger_fov_rect.right - self._trigger_fov_rect.left,
+                                self._trigger_fov_rect.left,
+                                self._trigger_fov_rect.top)
 
     def make_aimbot_train_screenshot(self):
         """ Make and return screenshot of the aimbot training fov """
 
-        monitor = {"top": self._aimbot_train_fov_rect.top, "left": self._aimbot_train_fov_rect.left,
-                   "width": self._aimbot_train_fov_rect.right - self._aimbot_train_fov_rect.left,
-                   "height": self._aimbot_train_fov_rect.bottom - self._aimbot_train_fov_rect.top}
-
-        return pil_frombytes(self._mss_handle.grab(monitor))
+        return self._screenshot(self._aimbot_train_fov_rect.bottom - self._aimbot_train_fov_rect.top,
+                                self._aimbot_train_fov_rect.right - self._aimbot_train_fov_rect.left,
+                                self._aimbot_train_fov_rect.left,
+                                self._aimbot_train_fov_rect.top)
 
     def make_aimbot_inference_screenshot(self):
         """ Make and return screenshot of the aimbot inference fov """
 
-        monitor = {"top": self._aimbot_inf_fov_rect.top, "left": self._aimbot_inf_fov_rect.left,
-                   "width": self._aimbot_inf_fov_rect.right - self._aimbot_inf_fov_rect.left,
-                   "height": self._aimbot_inf_fov_rect.bottom - self._aimbot_inf_fov_rect.top}
-
-        return pil_frombytes(self._mss_handle.grab(monitor))
+        return self._screenshot(self._aimbot_inf_fov_rect.bottom - self._aimbot_inf_fov_rect.top,
+                                self._aimbot_inf_fov_rect.right - self._aimbot_inf_fov_rect.left,
+                                self._aimbot_inf_fov_rect.left,
+                                self._aimbot_inf_fov_rect.top)
 
     def aimbot_query_pos_diff_to_aim(self, x_pos, y_pos):
         """ Transform aimbot x/y coordinates to screen coordinates and return relative position to the middle of the
@@ -186,10 +172,27 @@ class ScreenCapturer:
 
         return x_screen, y_screen
 
+    # Reference: https://stackoverflow.com/questions/66384468/how-to-record-my-computer-screen-with-high-fps
+    def _screenshot(self, height, width, left, top):
 
-# From https://python-mss.readthedocs.io/examples.html#bgra-to-rgb
-# Converts BGRA to RGB
-def pil_frombytes(image):
-    """ Efficient Pillow version. """
-    
-    return Image.frombytes('RGB', image.size, image.bgra, 'raw', 'BGRX')
+        hwindc = win32gui.GetWindowDC(self._process_handle)
+        srcdc = win32ui.CreateDCFromHandle(hwindc)
+        memdc = srcdc.CreateCompatibleDC()
+
+        bmp = win32ui.CreateBitmap()
+        bmp.CreateCompatibleBitmap(srcdc, width, height)
+        memdc.SelectObject(bmp)
+        memdc.BitBlt((0, 0), (width, height), srcdc, (left, top), win32con.SRCCOPY)
+
+        signed_ints_array = bmp.GetBitmapBits(True)
+        img_out = Image.frombuffer(
+            'RGB',
+            (width, height),
+            signed_ints_array, 'raw', 'BGRX', 0, 1)
+
+        srcdc.DeleteDC()
+        memdc.DeleteDC()
+        win32gui.ReleaseDC(self._process_handle, hwindc)
+        win32gui.DeleteObject(bmp.GetHandle())
+
+        return img_out
