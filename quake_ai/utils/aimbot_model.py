@@ -64,15 +64,14 @@ class AimbotModel:
     def init_inference(self):
         """ Initialize aimbot inference"""
 
-        self._model = YoloV3Tiny(size=self._config.aimbot_train_image_size, channels=3, classes=1, training=False)
+        self._model = YoloV3Tiny(channels=3, classes=2, training=False)
         self._model.load_weights(self._model_path)
 
     def predict(self, image):
 
         image = np.expand_dims(image, axis=0)
         image = self._preprocess_image(image)
-
-        return self._model(image)
+        return self._model(image, training=False)
 
     def shutdown_inference(self):
 
@@ -82,8 +81,6 @@ class AimbotModel:
     def _preprocess_image(self, image):
 
         # Rectangular images are not supported at the moment --> change this
-        if not self._training and (self._config.aimbot_inference_image_size != self._config.aimbot_train_image_size):
-            image = tf.image.resize(image, (self._config.aimbot_train_image_size, self._config.aimbot_train_image_size))
         image = tf.cast(image, tf.float32)
         image = (image - tf.reduce_mean(image)) / tf.math.reduce_std(image)
 
@@ -104,11 +101,11 @@ class TrainableAimbotModel(AimbotModel):
         super(TrainableAimbotModel, self).__init__(config, image_shape, model_path)
 
         self._training = True
-        self._model = YoloV3Tiny(size=self._config.aimbot_train_image_size, channels=3, classes=1, training=True)
+        self._model = YoloV3Tiny(channels=3, classes=2, training=True)
+        print(self._model.summary())
 
         self._optimizer = keras.optimizers.Adam(lr=0.001)
-        self._loss = [YoloLoss(yolo_tiny_anchors[mask], classes=1) for mask in yolo_tiny_anchor_masks]
-        self._model.compile(optimizer=self._optimizer, loss=self._loss)
+        self._loss = [YoloLoss(yolo_tiny_anchors[mask], classes=2) for mask in yolo_tiny_anchor_masks]
         self._current_epoch = 0  # relative to initialize time
         self._training_fov = (config.aimbot_train_image_size, config.aimbot_train_image_size)
         self._output_weights = os.path.join(os.path.dirname(model_path), 'aimbot_weights.hdf5')
@@ -124,7 +121,7 @@ class TrainableAimbotModel(AimbotModel):
                                                                         verbose=1, save_weights_only=True,
                                                                         save_best_only=True, mode='min'))
         self._training_callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5,
-                                                                          patience=10, min_lr=1e-7, verbose=1))
+                                                                          patience=40, min_lr=1e-7, verbose=1))
 
         logdir = os.path.join(os.path.dirname(self._model_path),
                               "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
@@ -141,6 +138,9 @@ class TrainableAimbotModel(AimbotModel):
             self._model = keras.models.load_model(self._model_path, custom_objects={'yolo_loss': self._loss})
         except (ImportError, IOError):
             self._current_epoch = 0
+
+        # Always recompile even if loaded!
+        self._model.compile(optimizer=self._optimizer, loss=self._loss)
 
         self._model.fit(x=data_train, validation_data=data_test, initial_epoch=self._current_epoch,
                         epochs=self._config.aimbot_train_epochs+self._current_epoch,
@@ -225,13 +225,13 @@ def build_example(image_path, label_list, class_map, image_size):
     classes_text = []
 
     for obj in label_list:
-
-        xmin.append(float(obj[0]) / width)
-        ymin.append(float(obj[1]) / height)
-        xmax.append(float(obj[0] + obj[2]) / width)
-        ymax.append(float(obj[1] + obj[3]) / height)
-        classes_text.append(class_map[0].encode('utf8'))
-        classes.append(0)
+        xmin.append(float(obj[1] - 0.5 * obj[3]))
+        ymin.append(float(obj[2] - 0.5 * obj[4]))
+        xmax.append(float(obj[1] + 0.5 * obj[3]))
+        ymax.append(float(obj[2] + 0.5 * obj[4]))
+        classes_text.append(class_map[int(obj[0])].encode('utf8'))
+        classes.append(int(obj[0]))
+        print(int(obj[0]))
 
     example = tf.train.Example(features=tf.train.Features(feature={
         'image/height': tf.train.Feature(int64_list=tf.train.Int64List(value=[height])),

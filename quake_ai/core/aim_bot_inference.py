@@ -35,6 +35,7 @@ import tkinter as tk
 import win32gui
 import win32con
 
+
 from quake_ai.utils.aimbot_model import AimbotModel
 
 
@@ -81,6 +82,7 @@ class Aimbot:
         """ Run the trigger bot for one screenshot """
 
         if self._active:
+
             # Hide overlay during screenshot taking
             self._overlay.hide()
             screenshot = np.array(self._screenshot_func())
@@ -115,10 +117,13 @@ class Aimbot:
                     found = True
 
             if found:
-                pydirectinput.moveRel(-current_shortest_rel[0]/2., -current_shortest_rel[1]/2., 0.005, relative=True)
+                pydirectinput.moveRel(-current_shortest_rel[0], -current_shortest_rel[1], 0.005, relative=True)
                 self._overlay.activate_rectangle(current_top_left, current_bottom_right)
             else:
                 self._overlay.deactivate_rectangle()
+
+        else:
+            self._overlay.update()
 
     def shutdown_inference(self):
         """ Stop the inference """
@@ -140,7 +145,7 @@ class Overlay:
     """ Simple overlay for displaying the (tracked) yolo bounding box"""
     def __init__(self):
 
-        self._rect_active = True
+        self._rect_active = False
 
         self._root = tk.Tk()
         self._root.title("Overlay")
@@ -156,7 +161,9 @@ class Overlay:
         self._canvas.config(bg='white')
         self._rect = self._canvas.create_rectangle(0, 0, 0, 0,
                                                    outline="#f11", width=2)
+        self._canvas.itemconfigure(self._rect, state='hidden')
         self._canvas.pack(fill=tk.BOTH, expand=1)
+        self._root.update()
 
     def activate_rectangle(self, top_left, bottom_right):
 
@@ -178,6 +185,10 @@ class Overlay:
     def show(self):
         if self._rect_active:
             self._canvas.itemconfigure(self._rect, state='normal')
+        self._root.update()
+
+    def update(self):
+
         self._root.update()
 
     def destroy(self):

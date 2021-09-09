@@ -164,15 +164,15 @@ class QuakeAiConfig:
         config['GENERAL'] = {'training_env_path': default_training_environment}
 
         # Default model lies in the repository itself
-        default_trigger_model_path = join(dirname(dirname(dirname(__file__))), 'default_models\\trigger_model.hdf5')
+        default_trigger_model_path = join(dirname(dirname(dirname(__file__))), 'default_models\\trigger_weights.hdf5')
         default_aimbot_model_path = join(dirname(dirname(dirname(__file__))), 'default_models\\aimbot_weights.hdf5')
 
         # Path to default class list
         default_classes_path = join(dirname(dirname(dirname(__file__))), 'default_models\\quake.names')
 
         config['TRIGGERBOT'] = {'model_path': default_trigger_model_path,
-                                'fov_height': '100',
-                                'fov_width': '100',
+                                'fov_height': '160',
+                                'fov_width': '160',
                                 'aim_size': '4'}
 
         config['TRIGGERBOT-TRAINING'] = {'learning_rate': '0.001',

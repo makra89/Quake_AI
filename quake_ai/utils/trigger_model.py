@@ -31,7 +31,7 @@
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Concatenate, \
-    AveragePooling2D, Flatten, Dropout, Activation, Dense
+    AveragePooling2D, Flatten, Dropout, Activation, Dense, GlobalAveragePooling2D
 from tensorflow.keras.regularizers import l2
 import numpy as np
 import os
@@ -61,7 +61,7 @@ class TriggerModel:
     def init_inference(self):
         """ Initialize trigger bot inference"""
 
-        self._model = self._create_trigger_model(self._image_shape)
+        self._model = self._create_trigger_model()
         self._model.load_weights(self._model_path)
 
     def predict_is_on_target(self, image):
@@ -85,7 +85,7 @@ class TriggerModel:
 
         return image
 
-    def _create_trigger_model(self, image_shape):
+    def _create_trigger_model(self, image_shape=(None, None)):
         """ Create the keras model itself (not compiled yet)
 
             The model itself is inspired by GoogleNet.
@@ -143,10 +143,9 @@ class TriggerModel:
         max_pool_2 = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same')(inception_2_output)
 
         # Output block
-        output_pool = AveragePooling2D(pool_size=(6, 6), strides=(1, 1), padding='same')(max_pool_2)
-        output_flat = Flatten()(output_pool)
-        output_dropout = Dropout(rate=0.2)(output_flat)
-        output_class = Dense(2, kernel_regularizer=l2(), activation='softmax')(output_dropout)
+        output_pool = GlobalAveragePooling2D()(max_pool_2)
+        output_dense = Dense(100, kernel_regularizer=l2(), activation='relu')(output_pool)
+        output_class = Dense(2, activation='softmax')(output_dense)
 
         # Construct the model itself
         model = keras.models.Model(inputs=image_input, outputs=output_class)
@@ -173,7 +172,7 @@ class TrainableTriggerModel(TriggerModel):
         self._model.compile(optimizer=self._optimizer,
                             loss='categorical_crossentropy', metrics=['accuracy'])
         self._current_epoch = 0  # relative to initialize time
-        self._output_weights = os.path.join(os.path.dirname(model_path), 'aimbot_weights.hdf5')
+        self._output_weights = os.path.join(os.path.dirname(model_path), 'trigger_weights.hdf5')
 
         #####################################
         #        Training Callbacks         #
@@ -183,7 +182,7 @@ class TrainableTriggerModel(TriggerModel):
         self._training_callbacks.append(keras.callbacks.ModelCheckpoint(self._model_path, monitor='val_loss',
                                                                         verbose=1, save_best_only=True, mode='min'))
         self._training_callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5,
-                                                                          patience=1, min_lr=1e-7, verbose=1))
+                                                                          patience=20, min_lr=1e-7, verbose=1))
         self._training_callbacks.append(keras.callbacks.ModelCheckpoint(self._output_weights, monitor='val_loss',
                                                                         verbose=1, save_weights_only=True,
                                                                         save_best_only=True, mode='min'))
@@ -192,7 +191,7 @@ class TrainableTriggerModel(TriggerModel):
                               "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
         self._training_callbacks.append(tf.keras.callbacks.TensorBoard(log_dir=logdir))
 
-        self._image_logger = ImageLogger(name='Images', logdir=logdir, max_images=2)
+        self._image_logger = ImageLogger(name='Images', logdir=logdir, max_images=2, draw_bbox=False)
 
     def fit_num_epochs(self, data_train, data_test):
         """ Fit for a number of epochs (see config). Model will be reloaded if existing to keep on training.
