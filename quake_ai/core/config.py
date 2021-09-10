@@ -154,6 +154,10 @@ class QuakeAiConfig:
     def annotator_step_size_width(self):
         return int(self._config['AIMBOT-ANNOTATION']['step_size_width'])
 
+    @property
+    def annotator_type(self):
+        return self._config['AIMBOT-ANNOTATION']['annotator_type']
+
     def _create_default_config(self):
         """ Creates default config """
 
@@ -192,11 +196,12 @@ class QuakeAiConfig:
                                      'learning_rate': '0.001',
                                      'batch_size': '30',
                                      'shuffle_size': '100',
-                                     'num_epochs': '50',
+                                     'num_epochs': '5000',
                                      }
 
         config['AIMBOT-ANNOTATION'] = {'num_images_per_step': 10,
                                        'step_size_height': 4,
-                                       'step_size_width': 4}
+                                       'step_size_width': 4,
+                                       'annotator_type': 'aimbot'}
 
         return config

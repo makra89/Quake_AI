@@ -104,8 +104,8 @@ class TrainableAimbotModel(AimbotModel):
         self._model = YoloV3Tiny(channels=3, classes=1, training=True)
         print(self._model.summary())
 
-        self._optimizer = keras.optimizers.Adam(lr=0.001)
-        self._loss = [YoloLoss(yolo_tiny_anchors[mask], classes=2) for mask in yolo_tiny_anchor_masks]
+        self._optimizer = keras.optimizers.Adam(self._config.aimbot_train_lr)
+        self._loss = [YoloLoss(yolo_tiny_anchors[mask], classes=1) for mask in yolo_tiny_anchor_masks]
         self._current_epoch = 0  # relative to initialize time
         self._training_fov = (config.aimbot_train_image_size, config.aimbot_train_image_size)
         self._output_weights = os.path.join(os.path.dirname(model_path), 'aimbot_weights.hdf5')
@@ -121,7 +121,7 @@ class TrainableAimbotModel(AimbotModel):
                                                                         verbose=1, save_weights_only=True,
                                                                         save_best_only=True, mode='min'))
         self._training_callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5,
-                                                                          patience=40, min_lr=1e-7, verbose=1))
+                                                                          patience=60, min_lr=1e-7, verbose=1))
 
         logdir = os.path.join(os.path.dirname(self._model_path),
                               "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
@@ -189,7 +189,8 @@ class TrainableAimbotModel(AimbotModel):
         dataset = dataset.map(lambda x, y: (
             self._preprocess_image(x), y))
 
-        dataset = dataset.map(self._image_logger, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        # Disable it when you don't need it!
+        # dataset = dataset.map(self._image_logger, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         dataset = dataset.map(lambda x, y: (
             x, transform_targets(y, yolo_tiny_anchors, yolo_tiny_anchor_masks, self._config.aimbot_train_image_size)))
