@@ -6,12 +6,15 @@ I got inspired by the work done in https://medium.com/swlh/training-a-neural-net
 
 This project is NOT meant to be used in online play, but should only be used for playing around offline!
 
-# Functionality
+# Triggerbot
 
 So far the only thing that is working is the triggerbot. The idea is that the triggerbot, once trained, will do the annotation of enemy bounding boxes for me. At least that is the plan. 
 
 - Fully functional triggerbot (default model + config provided)
 - Training environment for triggerbot
+
+
+[![Some trigger action](https://img.youtube.com/vi/4247DVzgEsU/hqdefault.jpg)](https://youtu.be/4247DVzgEsU)
 
 # Prerequisites
 
