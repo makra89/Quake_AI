@@ -106,8 +106,8 @@ class ImageAnnotator:
                         center_x = box[0] + 0.5 * box[2]
                         center_y = box[1] + 0.5 * box[3]
                         # Now find out if the enemy is on-target
-                        aim_x = self._aimbot_training_fov[0] / 2.
-                        aim_y = self._aimbot_training_fov[1] / 2.
+                        aim_x = self._aimbot_training_fov[1] / 2.
+                        aim_y = self._aimbot_training_fov[0] / 2.
                         # Very simple heuristic, will lead to false-positives
                         class_id = 0
                         on_target_x = np.abs(center_x - aim_x) <= 0.4 * box[2]
@@ -116,10 +116,10 @@ class ImageAnnotator:
                             class_id = 1
 
                         # Class, MeanX, MeanY, Width, Height
-                        file.write(str(class_id) + ' ' + str(center_x / self._aimbot_training_fov[0]) + ' '
-                                   + str(center_y / self._aimbot_training_fov[1])
-                                   + ' ' + str(box[2] / self._aimbot_training_fov[0]) + ' '
-                                   + str(box[3] / self._aimbot_training_fov[1]) + '\n')
+                        file.write(str(class_id) + ' ' + str(center_x / self._aimbot_training_fov[1]) + ' '
+                                   + str(center_y / self._aimbot_training_fov[0])
+                                   + ' ' + str(box[2] / self._aimbot_training_fov[1]) + ' '
+                                   + str(box[3] / self._aimbot_training_fov[0]) + '\n')
 
             # If there are none, remove the file
             else:
@@ -202,7 +202,7 @@ class ImageAnnotator:
             left = self._aimbot_training_fov[1] * box[0]
             top = self._aimbot_training_fov[0] * box[1]
             width = self._aimbot_training_fov[1] * (box[2] - box[0])
-            height = self._aimbot_training_fov[1] * (box[3] - box[1])
+            height = self._aimbot_training_fov[0] * (box[3] - box[1])
 
             output_boxes.append([left.numpy(), top.numpy(), width.numpy(), height.numpy()])
 

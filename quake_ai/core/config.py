@@ -63,6 +63,14 @@ class QuakeAiConfig:
             self._config.read_file(file)
 
     @property
+    def screen_fine_tune_x(self):
+        return int(self._config['SCREEN']['fine_tune_x'])
+
+    @property
+    def screen_fine_tune_y(self):
+        return int(self._config['SCREEN']['fine_tune_y'])
+
+    @property
     def training_env_path(self):
         return self._config['GENERAL']['training_env_path']
 
@@ -173,6 +181,9 @@ class QuakeAiConfig:
 
         # Path to default class list
         default_classes_path = join(dirname(dirname(dirname(__file__))), 'default_models\\quake.names')
+
+        config['SCREEN'] = {'fine_tune_x': 7,
+                            'fine_tune_y': 8}
 
         config['TRIGGERBOT'] = {'model_path': default_trigger_model_path,
                                 'fov_height': '160',

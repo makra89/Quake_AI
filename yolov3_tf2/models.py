@@ -21,7 +21,7 @@ from tensorflow.keras.losses import (
 from .utils import broadcast_iou
 
 # TODO: Add these values to config?
-YOLO_MAX_BOXES = 10
+YOLO_MAX_BOXES = 100
 YOLO_IOU_THRESHOLD = 0.5
 YOLO_SCORE_THRESHOLD = 0.5
 
@@ -30,8 +30,9 @@ yolo_anchors = np.array([(10, 13), (16, 30), (33, 23), (30, 61), (62, 45),
                         np.float32) / 416
 yolo_anchor_masks = np.array([[6, 7, 8], [3, 4, 5], [0, 1, 2]])
 
-yolo_tiny_anchors = np.array([(10, 14), (23, 27), (37, 58),
-                              (81, 82), (135, 169),  (344, 319)],
+# Determined for custom dataset
+yolo_tiny_anchors = np.array([(14, 28), (22, 54), (30, 87),
+                              (45, 95), (52, 145),  (106, 216)],
                              np.float32) / 416
 yolo_tiny_anchor_masks = np.array([[3, 4, 5], [0, 1, 2]])
 
