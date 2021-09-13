@@ -28,9 +28,10 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import os
 import threading
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox
 from tkinter import filedialog
 
 from quake_ai.core.system import System
@@ -109,7 +110,14 @@ class QuakeAiGui:
         tk.Button(self._main_frame, text="Stop Current Task", font=('Helvetica', 10),
                   command=self._stop_current_task).pack(pady=10)
 
+        # Mixing win32gui and tkinter leads to crashes on exit --> prevent this by hard shutdown via os
+        self._root.protocol("WM_DELETE_WINDOW", self._on_closing)
+
         self._root.mainloop()
+
+    def _on_closing(self):
+        if messagebox.askokcancel("Quit", "Do you want to quit?"):
+            os._exit(0)  # We need this otherwise the app will crash on exit :/
 
     def _startup_system(self):
         """ Start the internal system """

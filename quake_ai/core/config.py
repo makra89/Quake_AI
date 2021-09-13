@@ -63,6 +63,14 @@ class QuakeAiConfig:
             self._config.read_file(file)
 
     @property
+    def screen_fine_tune_x(self):
+        return int(self._config['SCREEN']['fine_tune_x'])
+
+    @property
+    def screen_fine_tune_y(self):
+        return int(self._config['SCREEN']['fine_tune_y'])
+
+    @property
     def training_env_path(self):
         return self._config['GENERAL']['training_env_path']
 
@@ -154,6 +162,10 @@ class QuakeAiConfig:
     def annotator_step_size_width(self):
         return int(self._config['AIMBOT-ANNOTATION']['step_size_width'])
 
+    @property
+    def annotator_type(self):
+        return self._config['AIMBOT-ANNOTATION']['annotator_type']
+
     def _create_default_config(self):
         """ Creates default config """
 
@@ -169,6 +181,9 @@ class QuakeAiConfig:
 
         # Path to default class list
         default_classes_path = join(dirname(dirname(dirname(__file__))), 'default_models\\quake.names')
+
+        config['SCREEN'] = {'fine_tune_x': 7,
+                            'fine_tune_y': 8}
 
         config['TRIGGERBOT'] = {'model_path': default_trigger_model_path,
                                 'fov_height': '160',
@@ -192,11 +207,12 @@ class QuakeAiConfig:
                                      'learning_rate': '0.001',
                                      'batch_size': '30',
                                      'shuffle_size': '100',
-                                     'num_epochs': '50',
+                                     'num_epochs': '5000',
                                      }
 
         config['AIMBOT-ANNOTATION'] = {'num_images_per_step': 10,
                                        'step_size_height': 4,
-                                       'step_size_width': 4}
+                                       'step_size_width': 4,
+                                       'annotator_type': 'aimbot'}
 
         return config

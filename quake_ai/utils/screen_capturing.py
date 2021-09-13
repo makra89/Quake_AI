@@ -31,7 +31,7 @@
 import win32gui
 import win32ui
 import win32con
-import numpy as np
+import win32api
 from PIL import Image
 
 
@@ -70,6 +70,7 @@ class ScreenCapturer:
         self._trigger_fov_rect = None  # Window for trigger bot fov
         self._aimbot_train_fov_rect = None  # Window for aimbot trainining fov
         self._aimbot_inf_fov_rect = None  # Window for aimbot trainining fov
+        self._aim_shift = None
 
     def startup(self):
         """ Attach ScreenCapturer to the Quake Live handle (if existing)
@@ -81,18 +82,8 @@ class ScreenCapturer:
             raise RuntimeError('Cannot find Quake Live window on primary screen')
         else:
             win32gui.SetForegroundWindow(self._process_handle)
-            # Get Client rect --> this is in client coordinates
-            client_rect = _WindowRect((win32gui.GetClientRect(self._process_handle)))
 
-            # Convert to screen coordinates
-            left_top_client = (client_rect.left, client_rect.top)
-            right_bottom_client = (client_rect.right, client_rect.bottom)
-            left_top_screen = win32gui.ClientToScreen(self._process_handle, left_top_client)
-            right_bottom_screen = win32gui.ClientToScreen(self._process_handle, right_bottom_client)
-
-            self._window_rect = _WindowRect((left_top_screen[0], left_top_screen[1],
-                                             right_bottom_screen[0], right_bottom_screen[1]))
-
+            self._window_rect = _WindowRect((win32gui.GetClientRect(self._process_handle)))
             # Calculate window for trigger bot fov
             trigger_fov_height = self._config.trigger_fov[0]
             trigger_fov_width = self._config.trigger_fov[1]
@@ -141,40 +132,25 @@ class ScreenCapturer:
                                 self._aimbot_inf_fov_rect.left,
                                 self._aimbot_inf_fov_rect.top)
 
-    def aimbot_query_pos_diff_to_aim(self, x_pos, y_pos):
-        """ Transform aimbot x/y coordinates to screen coordinates and return relative position to the middle of the
-            game window.
-            Caution: x is along width, y along height for input coordinates starting from left lower edge of fov
-            Will return position offsets:
-                - coord system starting aim position
-                - x axis goes to the right
-                - y axis goes down
-        """
+    def get_aim_pos(self):
+        """ Get the position of the aim in screen coordinates"""
 
-        x_screen = x_pos + self._aimbot_inf_fov_rect.left
-        y_screen = self._config.aimbot_inference_image_size - y_pos + self._aimbot_inf_fov_rect.top
+        left_top_client = (self._window_rect.left, self._window_rect.top)
+        right_bottom_client = (self._window_rect.right, self._window_rect.bottom)
+        left_top_screen = win32gui.ClientToScreen(self._process_handle, left_top_client)
+        right_bottom_screen = win32gui.ClientToScreen(self._process_handle, right_bottom_client)
 
-        rel_x_screen = x_screen - 0.5 * (self._aimbot_inf_fov_rect.left + self._aimbot_inf_fov_rect.right)
-        rel_y_screen = y_screen - 0.5 * (self._aimbot_inf_fov_rect.top + self._aimbot_inf_fov_rect.bottom)
-        return -rel_x_screen, rel_y_screen  # Measured from aim position
+        x_pos = 0.5 * (right_bottom_screen[0] + left_top_screen[0])
+        y_pos = 0.5 * (right_bottom_screen[1] + left_top_screen[1])
 
-    def aimbot_coord_trafo_to_screen(self, x_pos, y_pos):
-        """ Transform aimbot x/y coordinates to screen coordinates
-            Caution: x is along width, y along height for input coordinates starting from left lower edge of fov
-            Will return screen coordinates:
-                - coord system starting at upper left corner of screen
-                - x axis goes to the right
-                - y axis goes down
-        """
-
-        x_screen = x_pos + self._aimbot_inf_fov_rect.left
-        y_screen = self._config.aimbot_inference_image_size - y_pos + self._aimbot_inf_fov_rect.top
-
-        return x_screen, y_screen
+        return x_pos, y_pos
 
     # Reference: https://stackoverflow.com/questions/66384468/how-to-record-my-computer-screen-with-high-fps
     def _screenshot(self, height, width, left, top):
+        """ Do a screenshot, window may be inactive """
 
+        top = top + win32api.GetSystemMetrics(win32con.SM_CYCAPTION) + self._config.screen_fine_tune_y
+        left = left + win32api.GetSystemMetrics(win32con.SM_CYBORDER) + self._config.screen_fine_tune_x
         hwindc = win32gui.GetWindowDC(self._process_handle)
         srcdc = win32ui.CreateDCFromHandle(hwindc)
         memdc = srcdc.CreateCompatibleDC()

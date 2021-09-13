@@ -35,13 +35,14 @@ import tkinter as tk
 import win32gui
 import win32con
 
+
 from quake_ai.utils.aimbot_model import AimbotModel
 
 
 class Aimbot:
     """ Main class for aimbot inference """
 
-    def __init__(self, config, screenshot_func=None, screen_coord_trafo_func=None, aim_coord_trafo_func=None):
+    def __init__(self, config, screenshot_func=None, aim_pos_func=None):
         """ Initializes the aimbot
 
             :param model_path path to the trained(!) model
@@ -54,8 +55,8 @@ class Aimbot:
         self._activation_hook = None
         self._model_path = config.aimbot_model_path
         self._screenshot_func = screenshot_func
-        self._aim_coord_trafo = aim_coord_trafo_func
-        self._screen_coord_trafo = screen_coord_trafo_func
+        self._aim_pos_func = aim_pos_func
+
         self._fov = (config.aimbot_inference_image_size, config.aimbot_inference_image_size)
         # Do not do it here, prevent tensorflow from loading
         self._model = None
@@ -75,7 +76,7 @@ class Aimbot:
         self._activation_hook = keyboard.on_press_key(self._config.aimbot_activation_key,
                                                       self._activate_aimbot)
 
-        self._overlay = Overlay()
+        self._overlay = Overlay(self._fov, self._aim_pos_func())
 
     def run_inference(self):
         """ Run the trigger bot for one screenshot """
@@ -96,26 +97,33 @@ class Aimbot:
             for element_id in np.arange(nums):
                 box = boxes[0, element_id, :]
 
-                mean_x = self._fov[1] * 0.5 * (box[0] + box[2])
-                mean_y = self._fov[0] * 0.5 * (box[1] + box[3])
+                left = self._fov[1] * box[0].numpy()
+                top = self._fov[0] * box[1].numpy()
+                width = self._fov[1] * (box[2] - box[0]).numpy()
+                height = self._fov[0] * (box[3] - box[1]).numpy()
 
-                rel_x, rel_y = self._aim_coord_trafo(mean_x, mean_y)
+                mean_x = left + 0.5 * width
+                mean_y = top + 0.5 * height
+
+                rel_x, rel_y = (mean_x - self._fov[1]/2., mean_y - self._fov[0]/2.)
                 dist = np.sqrt(rel_x**2 + rel_y**2)
+
                 # Pick closest one
                 if dist < current_min_dist:
                     current_min_dist = dist
-                    current_shortest_rel = (rel_x, rel_y)
-                    current_top_left = self._screen_coord_trafo((self._fov[1] * box[0]).numpy(),
-                                                                (self._fov[0] * box[3]).numpy())
-                    current_bottom_right = self._screen_coord_trafo((self._fov[1] * box[2]).numpy(),
-                                                                    (self._fov[0] * box[1]).numpy())
+                    current_shortest_rel = (int(rel_x), int(rel_y))
+                    current_top_left = (left, top)
+                    current_bottom_right = (left + width, top + height)
                     found = True
 
             if found:
-                pydirectinput.moveRel(-current_shortest_rel[0], -current_shortest_rel[1], 0.005, relative=True)
+                pydirectinput.moveRel(current_shortest_rel[0], current_shortest_rel[1], 0.005, relative=True)
                 self._overlay.activate_rectangle(current_top_left, current_bottom_right)
             else:
                 self._overlay.deactivate_rectangle()
+
+        else:
+            self._overlay.deactivate_rectangle()
 
         self._overlay.update()
 
@@ -137,21 +145,31 @@ class Aimbot:
 
 class Overlay:
     """ Simple overlay for displaying the (tracked) yolo bounding box"""
-    def __init__(self):
+    def __init__(self, fov, aim_pos):
 
         self._rect_active = False
 
         self._root = tk.Tk()
         self._root.title("Overlay")
-        self._root.attributes('-fullscreen', True)
+
+        # get screen width and height
+        ws = self._root.winfo_screenwidth()  # width of the screen
+        hs = self._root.winfo_screenheight()  # height of the screen
+
+        # set the dimensions of the screen
+        # and where it is placed
+        self._root.geometry('%dx%d+%d+%d' % (fov[1], fov[0], aim_pos[0] - fov[1]/2.,
+                                             aim_pos[1] - fov[0]/2.))
+
         self._root.lift()
         self._root.wm_attributes("-topmost", True)
         self._root.wm_attributes("-disabled", True)
+        self._root.overrideredirect(1)  # Remove border
         self._root.wm_attributes("-transparentcolor", "white")
 
         _set_clickthrough('Overlay')
 
-        self._canvas = tk.Canvas(self._root)
+        self._canvas = tk.Canvas(self._root, bd=0, highlightthickness=0)
         self._canvas.config(bg='white')
         self._rect = self._canvas.create_rectangle(0, 0, 0, 0,
                                                    outline="#f11", width=2)
