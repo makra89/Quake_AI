@@ -68,6 +68,7 @@ class System:
 
         self._aimbot = Aimbot(config=self._config,
                               screenshot_func=self._screen_capturer.make_aimbot_inference_screenshot,
+                              tracker_screenshot_func=self._screen_capturer.make_aimbot_tracker_screenshot,
                               aim_pos_func=self._screen_capturer.get_aim_pos)
 
         self._image_annotator = ImageAnnotator(config=self._config)

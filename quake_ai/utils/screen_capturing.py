@@ -33,7 +33,8 @@ import win32ui
 import win32con
 import win32api
 from PIL import Image
-
+from threading import Lock
+import time
 
 class _WindowRect:
     """ Utility class for defining the edges of a rectangular window """
@@ -71,6 +72,10 @@ class ScreenCapturer:
         self._aimbot_train_fov_rect = None  # Window for aimbot trainining fov
         self._aimbot_inf_fov_rect = None  # Window for aimbot trainining fov
         self._aim_shift = None
+        self._mutex = Lock()
+
+        self._last_aimbot_inf_track_time = 0
+        self._last_aimbot_inf_track_screen = None
 
     def startup(self):
         """ Attach ScreenCapturer to the Quake Live handle (if existing)
@@ -127,10 +132,31 @@ class ScreenCapturer:
     def make_aimbot_inference_screenshot(self):
         """ Make and return screenshot of the aimbot inference fov """
 
-        return self._screenshot(self._aimbot_inf_fov_rect.bottom - self._aimbot_inf_fov_rect.top,
-                                self._aimbot_inf_fov_rect.right - self._aimbot_inf_fov_rect.left,
+        if time.time() - self._last_aimbot_inf_track_time < 0.01:
+            return self._last_aimbot_inf_track_screen
+        else:
+            self._last_aimbot_inf_track_time = time.time()
+            self._last_aimbot_inf_track_screen = self._screenshot(self._aimbot_inf_fov_rect.bottom - self._aimbot_inf_fov_rect.top,
+                                                                  self._aimbot_inf_fov_rect.right - self._aimbot_inf_fov_rect.left,
                                 self._aimbot_inf_fov_rect.left,
                                 self._aimbot_inf_fov_rect.top)
+
+        return self._last_aimbot_inf_track_screen
+
+    def make_aimbot_tracker_screenshot(self):
+        """ Make and return screenshot of the aimbot inference fov """
+
+        if time.time() - self._last_aimbot_inf_track_time < 0.01:
+            return self._last_aimbot_inf_track_screen
+        else:
+            self._last_aimbot_inf_track_time = time.time()
+            self._last_aimbot_inf_track_screen = self._screenshot(self._aimbot_inf_fov_rect.bottom - self._aimbot_inf_fov_rect.top,
+                                    self._aimbot_inf_fov_rect.right - self._aimbot_inf_fov_rect.left,
+                                    self._aimbot_inf_fov_rect.left,
+                                    self._aimbot_inf_fov_rect.top)
+
+        return self._last_aimbot_inf_track_screen
+
 
     def get_aim_pos(self):
         """ Get the position of the aim in screen coordinates"""
@@ -149,26 +175,28 @@ class ScreenCapturer:
     def _screenshot(self, height, width, left, top):
         """ Do a screenshot, window may be inactive """
 
-        top = top + win32api.GetSystemMetrics(win32con.SM_CYCAPTION) + self._config.screen_fine_tune_y
-        left = left + win32api.GetSystemMetrics(win32con.SM_CYBORDER) + self._config.screen_fine_tune_x
-        hwindc = win32gui.GetWindowDC(self._process_handle)
-        srcdc = win32ui.CreateDCFromHandle(hwindc)
-        memdc = srcdc.CreateCompatibleDC()
+        with self._mutex:
 
-        bmp = win32ui.CreateBitmap()
-        bmp.CreateCompatibleBitmap(srcdc, width, height)
-        memdc.SelectObject(bmp)
-        memdc.BitBlt((0, 0), (width, height), srcdc, (left, top), win32con.SRCCOPY)
+            top = top + win32api.GetSystemMetrics(win32con.SM_CYCAPTION) + self._config.screen_fine_tune_y
+            left = left + win32api.GetSystemMetrics(win32con.SM_CYBORDER) + self._config.screen_fine_tune_x
+            hwindc = win32gui.GetWindowDC(self._process_handle)
+            srcdc = win32ui.CreateDCFromHandle(hwindc)
+            memdc = srcdc.CreateCompatibleDC()
 
-        signed_ints_array = bmp.GetBitmapBits(True)
-        img_out = Image.frombuffer(
-            'RGB',
-            (width, height),
-            signed_ints_array, 'raw', 'BGRX', 0, 1)
+            bmp = win32ui.CreateBitmap()
+            bmp.CreateCompatibleBitmap(srcdc, width, height)
+            memdc.SelectObject(bmp)
+            memdc.BitBlt((0, 0), (width, height), srcdc, (left, top), win32con.SRCCOPY)
 
-        srcdc.DeleteDC()
-        memdc.DeleteDC()
-        win32gui.ReleaseDC(self._process_handle, hwindc)
-        win32gui.DeleteObject(bmp.GetHandle())
+            signed_ints_array = bmp.GetBitmapBits(True)
+            img_out = Image.frombuffer(
+                    'RGB',
+                    (width, height),
+                    signed_ints_array, 'raw', 'BGRX', 0, 1)
 
-        return img_out
+            srcdc.DeleteDC()
+            memdc.DeleteDC()
+            win32gui.ReleaseDC(self._process_handle, hwindc)
+            win32gui.DeleteObject(bmp.GetHandle())
+
+            return img_out
