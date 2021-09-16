@@ -37,14 +37,6 @@ There are a bunch of settings required in Quake Live for our glorious AI to work
 - Force the enemy player model to "bones", choose skin "Bright" and set all enemy colors to green
 - Switch mouse input to -1 (windows mouse), direct input does not work for me
 
-# Dependencies
-
-Most imortant packages needed:
-
-- Tensorflow/Keras (I tested with v2.2)
-- pyautogui
-- mss
-
 # Setup
 
 - Run the script start_quake_ai.py in the main folder
