@@ -21,6 +21,12 @@ At the moment it is hard-coded for Quake Live, but with some effort it should be
 
 [![Some aimbot action](https://img.youtube.com/vi/ArPtX1xwGiY/hqdefault.jpg)](https://youtu.be/ArPtX1xwGiY)
 
+Yolov3-tiny only would not be enough with its ~ 30 FPS.
+The MedianFlow tracker helps a lot in-between to yolo detections.
+In the following video i deactivated the mouse movement to show the difference between detection/tracking FPS.
+
+[![Detection/Tracking](https://img.youtube.com/vi/Mi6IjBMavg8/hqdefault.jpg)](https://youtu.be/Mi6IjBMavg8)
+
 # Triggerbot
 
 The triggerbot detects enemies in a (default) 160x160 pixel field-of-view and uses an InceptionNet-inspired architecture. It triggers as soon as the aim touches the edges of an enemy. Since it is a very small neural net (~700k parameters) it is really fast. The downside is that there are a lot of false-positives, for example it also triggers when the railgun ammunition box is in the fov. 
