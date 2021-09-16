@@ -38,12 +38,40 @@ import pygame
 from ctypes import windll
 from quake_ai.utils.aimbot_model import AimbotModel
 import time
+from threading import Thread, Event, Lock
+from queue import Queue
+import cv2
+
+OVERLAY_HEARTBEAT_SEC = 0.02  # Do not update/query the overlay too often
+SCORE_THRESH = 0.95  # Do not track targets with scores lower than this one
+MAX_MOVE = 10  # Maximum number of pixels moved in one action
+NO_PREDICT_UPDATE_CYCLES = 5  # Maximum number of cycles the tracker goes on tracking without predictor updates
+PREDICTOR_SLEEP = 0.05
+TRACKER_SLEEP = 0.01
+MAX_MOVEMENT_FREQ = 100  # Hz
+
+
+class BoundingBox:
+
+    def __init__(self, left, top, width, height):
+
+        self.left = int(left)
+        self.top = int(top)
+        self.width = int(width)
+        self.height = int(height)
+
+    def as_tuple(self):
+        return self.left, self.top, self.width, self.height
+
+    def as_open_cv_rect(self):
+
+        return (self.left, self.top), (self.left + self.width, self.top + self.height)
 
 
 class Aimbot:
     """ Main class for aimbot inference """
 
-    def __init__(self, config, screenshot_func=None, aim_pos_func=None):
+    def __init__(self, config, screenshot_func=None, aim_pos_func=None, tracker_screenshot_func=None):
         """ Initializes the aimbot
 
             :param model_path path to the trained(!) model
@@ -56,6 +84,7 @@ class Aimbot:
         self._activation_hook = None
         self._model_path = config.aimbot_model_path
         self._screenshot_func = screenshot_func
+        self._tracker_screenshot_func = tracker_screenshot_func
         self._aim_pos_func = aim_pos_func
 
         self._fov = (config.aimbot_inference_image_size, config.aimbot_inference_image_size)
@@ -65,6 +94,15 @@ class Aimbot:
         self._active = False
         self._overlay = None
 
+        # Threading members
+        self._shared_predictor = None
+        self._shared_box_buffer = SharedBoxBuffer()
+        self._stop_event = Event()
+        self._active_event = Event()
+        self._box_queue = Queue()
+        self._box_eval_thread = None
+        self._overlay_thread = None
+
     def init_inference(self):
         """ Initialize the model for inference (tries to load the saved model) """
 
@@ -72,60 +110,32 @@ class Aimbot:
         if self._model is None:
             self._model = AimbotModel(self._config, self._fov, self._model_path)
 
+        self._shared_predictor = ThreadSafePredictor(predict_func=self._model.predict,
+                                                     screenshot_func=self._screenshot_func,
+                                                     fov=self._fov)
+
         self._model.init_inference()
         pydirectinput.PAUSE = 0.0
         self._activation_hook = keyboard.on_press_key(self._config.aimbot_activation_key,
                                                       self._activate_aimbot)
 
-        self._overlay = Overlay(self._fov, self._aim_pos_func())
+        self._box_eval_thread = Thread(target=eval_boxes_worker, args=(self._stop_event, self._active_event,
+                                                                       self._shared_predictor,
+                                                                       self._shared_box_buffer, self._fov,
+                                                                       self._tracker_screenshot_func))
+        self._box_eval_thread.start()
+
+        self._overlay_thread = Thread(target=overlay_worker, args=(self._stop_event, self._shared_box_buffer,
+                                                                   self._aim_pos_func(), self._fov))
+        self._overlay_thread.start()
 
     def run_inference(self):
-        """ Run the trigger bot for one screenshot """
+        """ Run the aimbot for one screenshot """
 
         if self._active:
-            screenshot = np.array(self._screenshot_func())
-            boxes, scores, classes, nums = self._model.predict(screenshot)
 
-            current_min_dist = 1000
-            current_shortest_rel = (0, 0)
-            current_top_left = (0, 0)
-            current_bottom_right = (0, 0)
-            found = False
-
-            # Naive approach: Just take the box which is closest to the aim
-            # Results in jumping around a lot
-            for element_id in np.arange(nums):
-                box = boxes[0, element_id, :]
-
-                left = self._fov[1] * box[0].numpy()
-                top = self._fov[0] * box[1].numpy()
-                width = self._fov[1] * (box[2] - box[0]).numpy()
-                height = self._fov[0] * (box[3] - box[1]).numpy()
-
-                mean_x = left + 0.5 * width
-                mean_y = top + 0.5 * height
-
-                rel_x, rel_y = (mean_x - self._fov[1]/2., mean_y - self._fov[0]/2.)
-                dist = np.sqrt(rel_x**2 + rel_y**2)
-
-                # Pick closest one
-                if dist < current_min_dist:
-                    current_min_dist = dist
-                    current_shortest_rel = (int(rel_x), int(rel_y))
-                    current_left_top = (left, top)
-                    current_width_height = (width, height)
-                    found = True
-
-            if found:
-                pydirectinput.move(current_shortest_rel[0], current_shortest_rel[1])
-                self._overlay.activate_rectangle(current_left_top, current_width_height)
-            else:
-                self._overlay.deactivate_rectangle()
-
-        else:
-            self._overlay.deactivate_rectangle()
-
-        self._overlay.update()
+            self._shared_predictor.update()
+            time.sleep(PREDICTOR_SLEEP)
 
     def shutdown_inference(self):
         """ Stop the inference """
@@ -135,11 +145,211 @@ class Aimbot:
         if self._activation_hook is not None:
             keyboard.unhook(self._activation_hook)
 
-        self._overlay = None
+        self._stop_event.set()
+        self._box_eval_thread.join()
+        self._box_eval_thread = None
+        self._overlay_thread.join()
+        self._overlay_thread = None
 
     def _activate_aimbot(self, _):
 
         self._active = not self._active
+
+        if self._active:
+            self._active_event.set()
+        else:
+            self._active_event.clear()
+
+
+class ThreadSafePredictor:
+
+    def __init__(self, screenshot_func, predict_func, fov):
+
+        self._screen_func = screenshot_func
+        self._predict_func = predict_func
+        self._fov = fov
+        self._mutex = Lock()
+
+        self._predict_screen = None
+        self._predict_time = None
+        self._boxes = None
+        self._updated = False
+
+    def update(self):
+
+        screen = np.array(self._screen_func())
+        # Tensorflow releases the GIL!
+        boxes, scores, classes, nums = self._predict_func(screen)
+        # No reason to forward boxes if there aren't any
+        nums = int(nums.numpy())
+        if nums > 0:
+            boxes = boxes[0].numpy()[:nums, :]
+            self._mutex.acquire()
+            self._boxes = [BoundingBox(box[0] * self._fov[1], box[1] * self._fov[0],
+                                       self._fov[1] * (box[2] - box[0]),
+                                       self._fov[0] * (box[3] - box[1])) for box in boxes]
+
+            self._predict_time = time.time()
+            self._predict_screen = screen
+            self._updated = True
+            self._mutex.release()
+
+        else:
+            self._mutex.acquire()
+            self._updated = False
+            self._mutex.release()
+
+    def has_update(self):
+
+        with self._mutex:
+            return self._updated
+
+    def get_updates(self):
+
+        with self._mutex:
+            self._updated = False
+            return self._boxes, self._predict_screen, self._predict_time
+
+
+class SharedBoxBuffer:
+
+    def __init__(self):
+
+        self._mutex = Lock()
+
+        self._reset_flag = True
+        self._predict_box = None
+        self._tracked_box = None
+        self._updated = False
+
+    def update(self, reset_flag, predict_box=None, tracked_box=None):
+
+        self._mutex.acquire()
+        self._reset_flag = reset_flag
+        if predict_box:
+            self._predict_box = predict_box
+        if tracked_box:
+            self._tracked_box = tracked_box
+        self._updated = True
+
+        self._mutex.release()
+
+    def has_update(self):
+
+        with self._mutex:
+            return self._updated
+
+    def get_update(self):
+
+        with self._mutex:
+            self._updated = False
+            return self._reset_flag, self._predict_box, self._tracked_box
+
+
+def eval_boxes_worker(stop_event, active_event, shared_predictor, shared_box_buffer, fov, screenshot_func):
+    """ Receives boxes, picks one box to target and performs mouse movements """
+
+    pydirectinput.PAUSE = 0.0
+
+    # Some function-global variables
+    cycles_without_update = 0
+    last_move_time = 0.0
+    last_predict_time = 0.0
+
+    def move(x, y, last_time):
+        if active_event.is_set() and time.time() - last_time > 1./MAX_MOVEMENT_FREQ:
+            pydirectinput.move(min(MAX_MOVE, x), min(MAX_MOVE, y))
+            last_time = time.time()
+        return last_time
+
+    def calc_rel(in_box):
+        mean_x = in_box.left + 0.5 * in_box.width
+        mean_y = in_box.top + 0.5 * in_box.height
+        return mean_x - fov[1] / 2., mean_y - fov[0] / 2.
+
+    tracker = None
+    while not stop_event.is_set():
+        if shared_predictor.has_update():
+
+            boxes, screen, last_predict_time = shared_predictor.get_updates()
+
+            current_min_dist = 1000
+            current_shortest_rel = (0, 0)
+            current_best_box = None
+            found = False
+
+            # Naive approach: Just take the box which is closest to the aim
+            # Results in jumping around a lot
+            # TODO: If a valid target is being tracked, wait some time and do not jump!
+            for box in boxes:
+
+                rel_x, rel_y = calc_rel(box)
+                dist = np.sqrt(rel_x ** 2 + rel_y ** 2)
+
+                # Pick closest one
+                if dist < current_min_dist:
+                    current_min_dist = dist
+                    current_shortest_rel = (int(rel_x), int(rel_y))
+                    current_best_box = box
+                    found = True
+
+            if found:
+                # Init tracker, MedianFlow is a good compromise, CSRT is better, but way slower
+                tracker = cv2.legacy.TrackerMedianFlow_create()
+                tracker.init(screen, current_best_box.as_tuple())
+
+                shared_box_buffer.update(False, current_best_box, current_best_box)
+                last_move_time = move(current_shortest_rel[0], current_shortest_rel[1], last_move_time)
+                cycles_without_update = 0
+            else:
+                # Always increase counter, We cannot trust the tracker to report a failure in tracking
+                cycles_without_update += 1
+                if tracker and cycles_without_update <= NO_PREDICT_UPDATE_CYCLES:
+                    ret, bbox_cv = tracker.update(np.array(screenshot_func()))
+                    if ret:
+                        box = BoundingBox(bbox_cv[0], bbox_cv[1], bbox_cv[2], bbox_cv[3])
+                        rel_x, rel_y = calc_rel(box)
+                        last_move_time = move(int(rel_x), int(rel_y), last_move_time)
+                        shared_box_buffer.update(False, tracked_box=box)
+                else:
+                    shared_box_buffer.update(True)
+
+        else:
+            time.sleep(TRACKER_SLEEP)
+            # Only track for a certain time (use case: in between to predictions)
+            if tracker and time.time() - last_predict_time < (2 * PREDICTOR_SLEEP):
+                ret, bbox_cv = tracker.update(np.array(screenshot_func()))
+                if ret:
+                    box = BoundingBox(bbox_cv[0], bbox_cv[1], bbox_cv[2], bbox_cv[3])
+                    rel_x, rel_y = calc_rel(box)
+                    last_move_time = move(int(rel_x), int(rel_y), last_move_time)
+                    shared_box_buffer.update(False, tracked_box=box)
+            else:
+                shared_box_buffer.update(True)
+
+    pydirectinput.PAUSE = 0.1
+
+
+def overlay_worker(stop_event, shared_box_buffer, aim_pos, fov):
+    """ Overlay process, draws boxes coming from the eval process """
+
+    overlay = Overlay(fov, aim_pos)
+
+    while not stop_event.is_set():
+        if shared_box_buffer.has_update():
+            reset, predict_box, tracked_box = shared_box_buffer.get_update()
+
+            if not reset:
+                overlay.activate_predict_rect(predict_box, tracked_box)
+            else:
+                overlay.deactivate_predict_rect()
+
+            overlay.update()
+            time.sleep(OVERLAY_HEARTBEAT_SEC)
+
+        else:
+            overlay.update()
+            time.sleep(OVERLAY_HEARTBEAT_SEC)
 
 
 class Overlay:
@@ -158,27 +368,33 @@ class Overlay:
         _set_transparent_clickthrough(self._hwnd, self._trans_color, int(aim_pos[0] - fov[1]/2.),
                                       int(aim_pos[1] - fov[0]/2.))
 
-        self._rect = pygame.Rect(50, 50, 50, 50)
-        self._rect_color = self._trans_color
+        self._predict_rect = pygame.Rect(50, 50, 50, 50)
+        self._predict_color = self._trans_color
+
+        self._track_rect = pygame.Rect(50, 50, 50, 50)
+        self._track_color = self._trans_color
 
         self.update()
 
-    def activate_rectangle(self, left_top, width_heigth):
+    def activate_predict_rect(self, predict_box, track_box):
 
-        self._rect = pygame.Rect(left_top, width_heigth)
-        self._rect_color = (255, 0, 0)
+        self._predict_rect = pygame.Rect(predict_box.as_tuple())
+        self._predict_color = (255, 0, 0)
+        self._track_rect = pygame.Rect(track_box.as_tuple())
+        self._track_color = (0, 255, 0)
 
-    def deactivate_rectangle(self):
+    def deactivate_predict_rect(self):
 
-        self._rect_color = self._trans_color
+        self._predict_color = self._trans_color
+        self._track_color = self._trans_color
 
     def update(self):
 
         self._window.fill(self._trans_color)
-        pygame.draw.rect(self._window, self._rect_color, self._rect, 3)
+        pygame.draw.rect(self._window, self._predict_color, self._predict_rect, 3)
+        pygame.draw.rect(self._window, self._track_color, self._track_rect, 3)
         pygame.display.flip()
         pygame.event.pump()
-        time.sleep(0.01)
 
 
 def _set_transparent_clickthrough(hwnd, color, x_pos, y_pos):
