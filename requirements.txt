@@ -1,0 +1,11 @@
+tkinter
+keyboard
+pydirectinput
+pygame
+scikit-learn
+numpy
+Pillow
+
+opencv-python >= 4.5.0
+opencv-contrib-python >= 4.5.0
+tensorflow >= 2.0.0
