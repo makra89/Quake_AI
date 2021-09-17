@@ -37,6 +37,8 @@ import os
 import datetime
 import numpy as np
 from PIL import Image
+from imgaug import augmenters as iaa
+from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 
 from quake_ai.utils.model_utils import ImageLogger
 
@@ -129,6 +131,25 @@ class TrainableAimbotModel(AimbotModel):
 
         self._image_logger = ImageLogger(name='Images', logdir=logdir, max_images=2, draw_bbox=True)
 
+        self._seq = iaa.Sequential([
+            iaa.Fliplr(0.5),  # horizontal flips
+            iaa.Crop(percent=(0, 0.1)),  # random crops
+            # Strengthen or weaken the contrast in each image.
+            iaa.LinearContrast((0.75, 1.5)),
+            # Add gaussian noise. Preserves color!
+            iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05 * 255), per_channel=False),
+            # Make some images brighter and some darker. Preserves color!
+            iaa.Multiply((0.8, 1.2), per_channel=False),
+            # Apply affine transformations to each image.
+            # Scale/zoom them, translate/move them, rotate them and shear them.
+            iaa.Affine(
+                scale={"x": (0.8, 1.2), "y": (0.8, 1.2)},
+                translate_percent={"x": (-0.2, 0.2), "y": (-0.2, 0.2)},
+                rotate=(-5, 5),
+                shear=(-4, 4)
+            )
+        ], random_order=True)  # apply augmenters in random order
+
     def fit_num_epochs(self, data_train, data_test):
         """ Fit for a number of epochs (see config). Model will be reloaded if existing to keep on training.
             TODO: Resuming training is not working correctly after training is stopped, GUI closed, restarted
@@ -190,7 +211,7 @@ class TrainableAimbotModel(AimbotModel):
             self._preprocess_image(x), y))
 
         # Disable it when you don't need it!
-        # dataset = dataset.map(self._image_logger, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        dataset = dataset.map(self._image_logger, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         dataset = dataset.map(lambda x, y: (
             x, transform_targets(y, yolo_tiny_anchors, yolo_tiny_anchor_masks, self._config.aimbot_train_image_size)))
@@ -202,10 +223,50 @@ class TrainableAimbotModel(AimbotModel):
     @tf.function
     def _augment(self, image, label):
         """ Perform image augmentation """
-        # TODO: Implement more image augmentations!
 
-        image = tf.image.random_brightness(image, 0.2)
-        image = tf.image.random_hue(image, 0.2)
+        img_dtype = image.dtype
+        label_dtype = label.dtype
+
+        image, label = tf.py_function(self._augment_imgaug,
+                                         [image, label],
+                                         [img_dtype, label_dtype])
+
+        return image, label
+
+    def _augment_imgaug(self, image, label):
+
+        img_shape = tf.shape(image)
+        label_shape = tf.shape(label)
+        image = image.numpy()
+        label = label.numpy()
+        num_boxes = np.shape(label)[0]
+
+        height = np.shape(image)[0]
+        width = np.shape(image)[1]
+
+        bbox = []
+        for idx in range(np.shape(label)[0]):
+            box = label[idx, :]
+            bbox.append(BoundingBox(x1=box[0]*width, x2=box[2]*width, y1=box[1]*height,
+                                    y2=box[3]*height, label=str(box[4])))
+        bbox = BoundingBoxesOnImage(bbox, shape=image.shape)
+
+        # This is the augmentation call itself
+        image, bbox = self._seq(image=image, bounding_boxes=bbox)
+        # Re
+        bbox = bbox.remove_out_of_image().clip_out_of_image()
+
+        label = []
+        for box in bbox:
+            label.append([box.x1/width, box.y1/height, box.x2/width, box.y2/height, float(box.label)])
+        # Tensorflow expects labels to be of constant shape
+        for i in range(num_boxes - len(label)):
+            label.append([0.0, 0.0, 0.0, 0.0, 0.0])
+        label = np.array(label)
+
+        image = tf.reshape(image, img_shape)
+        # Label loses its type since we start from a new list
+        label = tf.reshape(label.astype('float32'), label_shape)
 
         return image, label
 
