@@ -41,6 +41,7 @@ import time
 from threading import Thread, Event, Lock
 from queue import Queue
 import cv2
+import imgaug
 
 OVERLAY_HEARTBEAT_SEC = 0.02  # Do not update/query the overlay too often
 SCORE_THRESH = 0.95  # Do not track targets with scores lower than this one
@@ -59,26 +60,23 @@ class BoundingBox:
         self.top = int(top)
         self.width = int(width)
         self.height = int(height)
+        self._imgaug_box = imgaug.augmentables.bbs.BoundingBox(x1=left, x2=left+width, y1=top, y2=top+height)
 
     def as_tuple(self):
         return self.left, self.top, self.width, self.height
 
     def as_open_cv_rect(self):
-
         return (self.left, self.top), (self.left + self.width, self.top + self.height)
+
+    def iou(self, box):
+        return self._imgaug_box.iou(box._imgaug_box)
 
 
 class Aimbot:
     """ Main class for aimbot inference """
 
     def __init__(self, config, screenshot_func=None, aim_pos_func=None, tracker_screenshot_func=None):
-        """ Initializes the aimbot
-
-            :param model_path path to the trained(!) model
-            :param config configuration object
-            :param screenshot_func screenshot function reference (from ImageCapturer)
-            :param coord_trafo_func gets relative pos. to aim position (from ImageCapturer)
-        """
+        """ Initializes the aimbot """
 
         self._config = config
         self._activation_hook = None
@@ -248,59 +246,79 @@ class SharedBoxBuffer:
 
 def eval_boxes_worker(stop_event, active_event, shared_predictor, shared_box_buffer, fov, screenshot_func):
     """ Receives boxes, picks one box to target and performs mouse movements """
-
+    # TODO: Try to encapsulate this mess!
     pydirectinput.PAUSE = 0.0
 
     # Some function-global variables
     cycles_without_update = 0
     last_move_time = 0.0
     last_predict_time = 0.0
+    tracked_box = None
 
     def move(x, y, last_time):
+        """ Perform the mouse movement """
         if active_event.is_set() and time.time() - last_time > 1./MAX_MOVEMENT_FREQ:
             pydirectinput.move(min(MAX_MOVE, x), min(MAX_MOVE, y))
             last_time = time.time()
         return last_time
 
     def calc_rel(in_box):
+        """ Calculate the relative distance in pixels to the aim"""
         mean_x = in_box.left + 0.5 * in_box.width
         mean_y = in_box.top + 0.5 * in_box.height
         return mean_x - fov[1] / 2., mean_y - fov[0] / 2.
 
+    def check_tracked_candidate(predict_boxes, tracked_candidate):
+        """ Check all predicted boxes for our tracked candidate """
+        if tracked_candidate:
+            best_iou = 0.0
+            for predict_box in predict_boxes:
+                iou = tracked_candidate.iou(predict_box)
+                if iou > best_iou:
+                    best_iou = iou
+                    tracked_candidate = predict_box
+
+            # We only need some evidence that the tracked and predicted boxes are the same
+            if tracked_candidate and best_iou < 0.4:
+                tracked_candidate = None
+
+        return tracked_candidate
+
     tracker = None
     while not stop_event.is_set():
+        # Check for predictor update
         if shared_predictor.has_update():
 
             boxes, screen, last_predict_time = shared_predictor.get_updates()
 
-            current_min_dist = 1000
-            current_shortest_rel = (0, 0)
-            current_best_box = None
-            found = False
+            # Approach 1: Use tracked box (if existing) and only update its location
+            candidate = check_tracked_candidate(boxes, tracked_box)
 
-            # Naive approach: Just take the box which is closest to the aim
-            # Results in jumping around a lot
-            # TODO: If a valid target is being tracked, wait some time and do not jump!
-            for box in boxes:
+            # Fallback approach: Just take the box which is closest to the aim
+            if not candidate:
 
-                rel_x, rel_y = calc_rel(box)
-                dist = np.sqrt(rel_x ** 2 + rel_y ** 2)
+                current_min_dist = 1000
+                current_shortest_rel = (0, 0)
+                for box in boxes:
 
-                # Pick closest one
-                if dist < current_min_dist:
-                    current_min_dist = dist
-                    current_shortest_rel = (int(rel_x), int(rel_y))
-                    current_best_box = box
-                    found = True
+                    rel_x, rel_y = calc_rel(box)
+                    dist = np.sqrt(rel_x ** 2 + rel_y ** 2)
 
-            if found:
+                    # Pick closest one
+                    if dist < current_min_dist:
+                        current_min_dist = dist
+                        current_shortest_rel = (int(rel_x), int(rel_y))
+                        candidate = box
+
+            if candidate:
                 # Init tracker, MedianFlow is a good compromise, CSRT is better, but way slower
                 tracker = cv2.legacy.TrackerMedianFlow_create()
-                tracker.init(screen, current_best_box.as_tuple())
+                tracker.init(screen, candidate.as_tuple())
 
-                shared_box_buffer.update(False, current_best_box, current_best_box)
+                shared_box_buffer.update(False, candidate, candidate)
                 last_move_time = move(current_shortest_rel[0], current_shortest_rel[1], last_move_time)
                 cycles_without_update = 0
+                tracked_box = candidate
             else:
                 # Always increase counter, We cannot trust the tracker to report a failure in tracking
                 cycles_without_update += 1
@@ -308,24 +326,28 @@ def eval_boxes_worker(stop_event, active_event, shared_predictor, shared_box_buf
                     ret, bbox_cv = tracker.update(np.array(screenshot_func()))
                     if ret:
                         box = BoundingBox(bbox_cv[0], bbox_cv[1], bbox_cv[2], bbox_cv[3])
+                        tracked_box = box
                         rel_x, rel_y = calc_rel(box)
                         last_move_time = move(int(rel_x), int(rel_y), last_move_time)
                         shared_box_buffer.update(False, tracked_box=box)
                 else:
                     shared_box_buffer.update(True)
-
+                    tracked_box = None
+        # No update from predictor --> try to track
         else:
-            time.sleep(TRACKER_SLEEP)
+            time.sleep(TRACKER_SLEEP)  # Aim at ~ 100 FPS
             # Only track for a certain time (use case: in between to predictions)
             if tracker and time.time() - last_predict_time < (2 * PREDICTOR_SLEEP):
                 ret, bbox_cv = tracker.update(np.array(screenshot_func()))
                 if ret:
                     box = BoundingBox(bbox_cv[0], bbox_cv[1], bbox_cv[2], bbox_cv[3])
+                    tracked_box = box
                     rel_x, rel_y = calc_rel(box)
                     last_move_time = move(int(rel_x), int(rel_y), last_move_time)
                     shared_box_buffer.update(False, tracked_box=box)
             else:
                 shared_box_buffer.update(True)
+                tracked_box = None
 
     pydirectinput.PAUSE = 0.1
 
