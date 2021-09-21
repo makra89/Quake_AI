@@ -28,7 +28,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from yolov3_tf2.models import YoloV3Tiny, YoloLoss, yolo_tiny_anchors, yolo_tiny_anchor_masks
+from yolov3_tf2.models import YoloV3Tiny3L, YoloLoss, yolo_tiny_3l_anchors, yolo_tiny_3l_anchor_masks
 from yolov3_tf2.dataset import load_tfrecord_dataset, transform_targets
 
 import tensorflow as tf
@@ -66,7 +66,7 @@ class AimbotModel:
     def init_inference(self):
         """ Initialize aimbot inference"""
 
-        self._model = YoloV3Tiny(channels=3, classes=1, training=False)
+        self._model = YoloV3Tiny3L(channels=3, classes=1, training=False)
         self._model.load_weights(self._model_path)
 
     def predict(self, image):
@@ -84,7 +84,7 @@ class AimbotModel:
 
         # Rectangular images are not supported at the moment --> change this
         image = tf.cast(image, tf.float32)
-        image = (image - tf.reduce_mean(image)) / tf.math.reduce_std(image)
+        image = image/255.
 
         return image
 
@@ -103,11 +103,11 @@ class TrainableAimbotModel(AimbotModel):
         super(TrainableAimbotModel, self).__init__(config, image_shape, model_path)
 
         self._training = True
-        self._model = YoloV3Tiny(channels=3, classes=1, training=True)
+        self._model = YoloV3Tiny3L(channels=3, classes=1, training=True)
         print(self._model.summary())
 
         self._optimizer = keras.optimizers.Adam(self._config.aimbot_train_lr)
-        self._loss = [YoloLoss(yolo_tiny_anchors[mask], classes=1) for mask in yolo_tiny_anchor_masks]
+        self._loss = [YoloLoss(yolo_tiny_3l_anchors[mask], classes=1) for mask in yolo_tiny_3l_anchor_masks]
         self._current_epoch = 0  # relative to initialize time
         self._training_fov = (config.aimbot_train_image_size, config.aimbot_train_image_size)
         self._output_weights = os.path.join(os.path.dirname(model_path), 'aimbot_weights.hdf5')
@@ -123,7 +123,7 @@ class TrainableAimbotModel(AimbotModel):
                                                                         verbose=1, save_weights_only=True,
                                                                         save_best_only=True, mode='min'))
         self._training_callbacks.append(keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5,
-                                                                          patience=60, min_lr=1e-7, verbose=1))
+                                                                          patience=100, min_lr=1e-7, verbose=1))
 
         logdir = os.path.join(os.path.dirname(self._model_path),
                               "logs" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
@@ -133,27 +133,12 @@ class TrainableAimbotModel(AimbotModel):
 
         self._seq = iaa.Sequential([
             iaa.Fliplr(0.5),  # horizontal flips
-            iaa.Crop(percent=(0, 0.1)),  # random crops
-            # Strengthen or weaken the contrast in each image.
-            iaa.LinearContrast((0.75, 1.5)),
-            # Add gaussian noise.
-            # For 50% of all images, we sample the noise once per pixel.
-            # For the other 50% of all images, we sample the noise per pixel AND
-            # channel. This can change the color (not only brightness) of the
-            # pixels.
-            iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05 * 255), per_channel=0.5),
             # Make some images brighter and some darker.
             # In 20% of all cases, we sample the multiplier once per channel,
             # which can end up changing the color of the images.
             iaa.Multiply((0.8, 1.2), per_channel=0.2),
-            # Apply affine transformations to each image.
-            # Scale/zoom them, translate/move them, rotate them and shear them.
-            iaa.Affine(
-                scale={"x": (0.8, 1.2), "y": (0.8, 1.2)},
-                translate_percent={"x": (-0.2, 0.2), "y": (-0.2, 0.2)},
-                rotate=(-5, 5),
-                shear=(-4, 4)
-            )
+            # Strengthen or weaken the contrast in each image.
+            iaa.LinearContrast((0.8, 1.2)),
         ], random_order=True)  # apply augmenters in random order
 
     def fit_num_epochs(self, data_train, data_test):
@@ -217,10 +202,11 @@ class TrainableAimbotModel(AimbotModel):
             self._preprocess_image(x), y))
 
         # Disable it when you don't need it!
-        dataset = dataset.map(self._image_logger, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        # dataset = dataset.map(self._image_logger, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         dataset = dataset.map(lambda x, y: (
-            x, transform_targets(y, yolo_tiny_anchors, yolo_tiny_anchor_masks, self._config.aimbot_train_image_size)))
+            x, transform_targets(y, yolo_tiny_3l_anchors, yolo_tiny_3l_anchor_masks,
+                                 self._config.aimbot_train_image_size)))
 
         dataset.prefetch(tf.data.experimental.AUTOTUNE)
 

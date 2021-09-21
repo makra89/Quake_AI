@@ -28,7 +28,11 @@ YOLO_SCORE_THRESHOLD = 0.5
 yolo_anchors = np.array([(10, 13), (16, 30), (33, 23), (30, 61), (62, 45),
                          (59, 119), (116, 90), (156, 198), (373, 326)],
                         np.float32) / 416
-yolo_anchor_masks = np.array([[6, 7, 8], [3, 4, 5], [0, 1, 2]])
+yolo_anchor_masks = yolo_tiny_3l_anchor_masks = np.array([[6, 7, 8], [3, 4, 5], [0, 1, 2]])
+
+yolo_tiny_3l_anchors = np.array([(11, 20), (15, 31), (16, 56), (24, 44), (27, 70),
+                         (35, 101), (51, 120), (71, 179), (132, 245)],
+                        np.float32) / 416
 
 # Determined for custom dataset
 yolo_tiny_anchors = np.array([(14, 28), (22, 54), (30, 87),
@@ -94,6 +98,23 @@ def DarknetTiny(name=None):
     x = MaxPool2D(2, 1, 'same')(x)
     x = DarknetConv(x, 1024, 3)
     return tf.keras.Model(inputs, (x_8, x), name=name)
+
+def DarknetTiny3L(name=None):
+    x = inputs = Input([None, None, 3])
+    x = DarknetConv(x, 16, 3)
+    x = MaxPool2D(2, 2, 'same')(x)
+    x = DarknetConv(x, 32, 3)
+    x = MaxPool2D(2, 2, 'same')(x)
+    x = DarknetConv(x, 64, 3)
+    x = MaxPool2D(2, 2, 'same')(x)
+    x = x_6 = DarknetConv(x, 128, 3)
+    x = MaxPool2D(2, 2, 'same')(x)
+    x = x_8 = DarknetConv(x, 256, 3)  # skip connection
+    x = MaxPool2D(2, 2, 'same')(x)
+    x = DarknetConv(x, 512, 3)
+    x = MaxPool2D(2, 1, 'same')(x)
+    x = DarknetConv(x, 1024, 3)
+    return tf.keras.Model(inputs, (x_6, x_8, x), name=name)
 
 
 def YoloConv(filters, name=None):
@@ -286,6 +307,36 @@ def YoloV3Tiny(size=None, channels=3, anchors=yolo_tiny_anchors,
                      name='yolo_nms')((boxes_0[:3], boxes_1[:3]))
     return Model(inputs, outputs, name='yolov3_tiny')
 
+
+def YoloV3Tiny3L(size=None, channels=3, anchors=yolo_tiny_3l_anchors,
+                 masks=yolo_tiny_3l_anchor_masks, classes=80, training=False):
+    x = inputs = Input([size, size, channels], name='input')
+
+    x_6, x_8, x = DarknetTiny3L(name='yolo_darknet')(x)
+
+    x = YoloConvTiny(256, name='yolo_conv_0')(x)
+    output_0 = YoloOutput(256, len(masks[0]), classes, name='yolo_output_0')(x)
+
+    x = YoloConvTiny(128, name='yolo_conv_1')((x, x_8))
+    output_1 = YoloOutput(128, len(masks[1]), classes, name='yolo_output_1')(x)
+
+    x = YoloConvTiny(128, name='yolo_conv_2')((x, x_6))
+    output_2 = YoloOutput(64, len(masks[2]), classes, name='yolo_output_2')(x)
+
+    if training:
+        return Model(inputs, (output_0, output_1, output_2), name='yolov3')
+
+    boxes_0 = Lambda(lambda x: yolo_boxes(x, anchors[masks[0]], classes),
+                     name='yolo_boxes_0')(output_0)
+    boxes_1 = Lambda(lambda x: yolo_boxes(x, anchors[masks[1]], classes),
+                     name='yolo_boxes_1')(output_1)
+    boxes_2 = Lambda(lambda x: yolo_boxes(x, anchors[masks[2]], classes),
+                     name='yolo_boxes_2')(output_2)
+
+    outputs = Lambda(lambda x: yolo_nms(x, anchors, masks, classes),
+                     name='yolo_nms')((boxes_0[:3], boxes_1[:3], boxes_2[:3]))
+
+    return Model(inputs, outputs, name='yolov3_tiny_3l')
 
 def YoloLoss(anchors, classes=80, ignore_thresh=0.5):
     def yolo_loss(y_true, y_pred):
