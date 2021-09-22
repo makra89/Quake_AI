@@ -30,26 +30,26 @@
 
 import numpy as np
 import keyboard
-import pydirectinput
 import win32gui
 import win32con
 import win32api
 import pygame
 from ctypes import windll
-from quake_ai.utils.aimbot_model import AimbotModel
 import time
 from threading import Thread, Event, Lock
 from queue import Queue
 import cv2
 import imgaug
 
+from quake_ai.utils.aimbot_model import AimbotModel
+from quake_ai.utils.input import Mouse
+
+
 OVERLAY_HEARTBEAT_SEC = 0.02  # Do not update/query the overlay too often
 SCORE_THRESH = 0.95  # Do not track targets with scores lower than this one
-MAX_MOVE = 10  # Maximum number of pixels moved in one action
 NO_PREDICT_UPDATE_CYCLES = 5  # Maximum number of cycles the tracker goes on tracking without predictor updates
 PREDICTOR_SLEEP = 0.05
 TRACKER_SLEEP = 0.01
-MAX_MOVEMENT_FREQ = 100  # Hz
 
 
 class BoundingBox:
@@ -84,7 +84,8 @@ class Aimbot:
         self._screenshot_func = screenshot_func
         self._tracker_screenshot_func = tracker_screenshot_func
         self._aim_pos_func = aim_pos_func
-
+        self._mouse = Mouse(config)
+        self._overlay_active = self._config.aimbot_overlay_on == 1
         self._fov = (config.aimbot_inference_image_size, config.aimbot_inference_image_size)
         # Do not do it here, prevent tensorflow from loading
         self._model = None
@@ -113,11 +114,12 @@ class Aimbot:
                                                      fov=self._fov)
 
         self._model.init_inference()
-        pydirectinput.PAUSE = 0.0
+        self._mouse.set_timeout(0.0)
         self._activation_hook = keyboard.on_press_key(self._config.aimbot_activation_key,
                                                       self._activate_aimbot)
 
-        self._box_eval_thread = Thread(target=eval_boxes_worker, args=(self._stop_event, self._active_event,
+        self._box_eval_thread = Thread(target=eval_boxes_worker, args=(self._mouse,
+                                                                       self._stop_event, self._active_event,
                                                                        self._shared_predictor,
                                                                        self._shared_box_buffer, self._fov,
                                                                        self._tracker_screenshot_func))
@@ -125,7 +127,8 @@ class Aimbot:
 
         self._overlay_thread = Thread(target=overlay_worker, args=(self._stop_event, self._shared_box_buffer,
                                                                    self._aim_pos_func(), self._fov))
-        self._overlay_thread.start()
+        if self._overlay_active:
+            self._overlay_thread.start()
 
     def run_inference(self):
         """ Run the aimbot for one screenshot """
@@ -139,15 +142,16 @@ class Aimbot:
         """ Stop the inference """
 
         self._model.shutdown_inference()
-        pydirectinput.PAUSE = 0.1
+        self._mouse.set_timeout(0.1)
         if self._activation_hook is not None:
             keyboard.unhook(self._activation_hook)
 
         self._stop_event.set()
         self._box_eval_thread.join()
         self._box_eval_thread = None
-        self._overlay_thread.join()
-        self._overlay_thread = None
+        if self._overlay_active:
+            self._overlay_thread.join()
+            self._overlay_thread = None
 
     def _activate_aimbot(self, _):
 
@@ -244,10 +248,10 @@ class SharedBoxBuffer:
             return self._reset_flag, self._predict_box, self._tracked_box
 
 
-def eval_boxes_worker(stop_event, active_event, shared_predictor, shared_box_buffer, fov, screenshot_func):
+def eval_boxes_worker(mouse, stop_event, active_event, shared_predictor, shared_box_buffer, fov, screenshot_func):
     """ Receives boxes, picks one box to target and performs mouse movements """
     # TODO: Try to encapsulate this mess!
-    pydirectinput.PAUSE = 0.0
+    mouse.set_timeout(0.0)
 
     # Some function-global variables
     cycles_without_update = 0
@@ -257,8 +261,8 @@ def eval_boxes_worker(stop_event, active_event, shared_predictor, shared_box_buf
 
     def move(x, y, last_time):
         """ Perform the mouse movement """
-        if active_event.is_set() and time.time() - last_time > 1./MAX_MOVEMENT_FREQ:
-            pydirectinput.move(min(MAX_MOVE, x), min(MAX_MOVE, y))
+        if active_event.is_set():
+            mouse.move_rel(x, y)
             last_time = time.time()
         return last_time
 
@@ -349,7 +353,7 @@ def eval_boxes_worker(stop_event, active_event, shared_predictor, shared_box_buf
                 shared_box_buffer.update(True)
                 tracked_box = None
 
-    pydirectinput.PAUSE = 0.1
+    mouse.set_timeout(0.1)
 
 
 def overlay_worker(stop_event, shared_box_buffer, aim_pos, fov):

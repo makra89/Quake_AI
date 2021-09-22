@@ -29,11 +29,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import numpy as np
-import pydirectinput
 import time
-import cv2
 
 from quake_ai.utils.trigger_model import TriggerModel
+from quake_ai.utils.input import Mouse
 
 
 class TriggerBot:
@@ -51,6 +50,7 @@ class TriggerBot:
         self._model_path = config.trigger_model_path
         self._screenshot_func = screenshot_func
         self._fov = (config.trigger_fov[0], config.trigger_fov[1])
+        self._mouse = Mouse(config)
         # Do not do it here, prevent tensorflow from loading
         self._model = None
 
@@ -62,6 +62,7 @@ class TriggerBot:
             self._model = TriggerModel(self._config, self._fov, self._model_path)
 
         self._model.init_inference()
+        self._mouse.set_timeout(0.0)
 
     def run_inference(self):
         """ Run the trigger bot for one screenshot, this will perform mouse_events! """
@@ -69,14 +70,15 @@ class TriggerBot:
         screenshot = np.expand_dims(np.array(self._screenshot_func()), axis=0)
 
         if self._model.predict_is_on_target(screenshot):
-            pydirectinput.mouseDown()
+            self._mouse.left_mouse_down()
             time.sleep(0.2)
-            pydirectinput.mouseUp()
+            self._mouse.left_mouse_up()
 
     def shutdown_inference(self):
         """ Stop the inference """
 
         self._model.shutdown_inference()
+        self._mouse.set_timeout(0.1)
 
 
 
