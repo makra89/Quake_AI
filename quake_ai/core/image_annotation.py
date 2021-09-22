@@ -52,7 +52,6 @@ class ImageAnnotator:
 
         # Choose type of annotation, either use trigger model or aimbot
         self._annotation_type = config.annotator_type
-        print(self._annotation_type)
         if self._annotation_type == 'aimbot':
             self._model_path = config.aimbot_model_path
         else:

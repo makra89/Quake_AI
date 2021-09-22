@@ -63,6 +63,26 @@ class QuakeAiConfig:
             self._config.read_file(file)
 
     @property
+    def mouse_time_until_traj_outdated(self):
+        return float(self._config['MOUSE']['time_until_traj_outdated'])
+
+    @property
+    def mouse_move_per_step(self):
+        return int(self._config['MOUSE']['move_per_step'])
+
+    @property
+    def mouse_steps_per_cycle(self):
+        return int(self._config['MOUSE']['steps_per_cycle'])
+
+    @property
+    def mouse_short_traj_max_length(self):
+        return int(self._config['MOUSE']['short_traj_max_length'])
+
+    @property
+    def mouse_short_traj_smooth_fac(self):
+        return float(self._config['MOUSE']['short_traj_smooth_fac'])
+
+    @property
     def screen_fine_tune_x(self):
         return int(self._config['SCREEN']['fine_tune_x'])
 
@@ -127,6 +147,10 @@ class QuakeAiConfig:
         return self._config['AIMBOT']['activation_key']
 
     @property
+    def aimbot_overlay_on(self):
+        return int(self._config['AIMBOT']['overlay_on'])
+
+    @property
     def aimbot_train_image_size(self):
         return int(self._config['AIMBOT-TRAINING']['image_size'])
 
@@ -185,6 +209,12 @@ class QuakeAiConfig:
         config['SCREEN'] = {'fine_tune_x': 7,
                             'fine_tune_y': 8}
 
+        config['MOUSE'] = {'time_until_traj_outdated': 0.05,
+                           'move_per_step': 2,
+                           'steps_per_cycle': 2,
+                           'short_traj_max_length': 20,
+                           'short_traj_smooth_fac': 3.}
+
         config['TRIGGERBOT'] = {'model_path': default_trigger_model_path,
                                 'fov_height': '160',
                                 'fov_width': '160',
@@ -200,7 +230,8 @@ class QuakeAiConfig:
         config['AIMBOT'] = {'image_size': '416',
                             'model_path': default_aimbot_model_path,
                             'class_file': default_classes_path,
-                            'activation_key': 'e'}
+                            'activation_key': 'e',
+                            'overlay_on': 1}
 
         config['AIMBOT-TRAINING'] = {'image_size': '416',
                                      'capture_key': 'e',
