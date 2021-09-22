@@ -1,6 +1,6 @@
 ![Logo](resources/logo.png)
 
-# Quake AI - Work in Progress!
+# Quake AI
 
 I got inspired by the work done in https://medium.com/swlh/training-a-neural-network-to-autoshoot-in-fps-games-e105f27ec1a0 and wanted to try it myself. I think games are a huge playground for computer vision and especially testing deep learning approaches. Why Quake? Simple, you have to start somewhere and you can force enemy models to be green glowing skeletons :)
 
@@ -9,19 +9,16 @@ This project is NOT meant to be used in online play, but should only be used for
 # Aimbot
 
 The aimbot is based on:
-- Yolov3-tiny neural net for detection (~30 FPS)
+- Yolov3-tiny-3l neural net for detection (~30 FPS). "3l" means that it has three detection heads instead of two
 - OpenCV MedianFlow tracker (~100 FPS)
-
-It is still an early version of the aimbot with a lot of flaws:
-- No tracker "history" --> jumps around a lot if there are multiple enemies present
-- Small enemies are hard to detect --> try Yolov3 or Yolov3-tiny-3l
 
 Quake AI comes with a complete framework for capturing training images, annotating the images and training the neural net.
 At the moment it is hard-coded for Quake Live, but with some effort it should be possible to port it to other games.
+The aimbot behavior can be configured using the configuration file, right now it is configured more as an aim assist than an aimbot.
 
 [![Some aimbot action](https://img.youtube.com/vi/ArPtX1xwGiY/hqdefault.jpg)](https://youtu.be/ArPtX1xwGiY)
 
-Yolov3-tiny only would not be enough with its ~ 30 FPS.
+Yolov3-tiny-3l only would not be enough with its ~ 30 FPS.
 The MedianFlow tracker helps a lot in-between to yolo detections.
 In the following video i deactivated the mouse movement to show the difference between detection/tracking FPS.
 
@@ -49,5 +46,7 @@ There are a bunch of settings required in Quake Live for our glorious AI to work
 - Either choose an existing config or type in a config name to create a default one
 - Open Quake Live and start a match (Instagib works well)
 - Push the Triggerbot or Aimbot start button
+- When using the aimbot activate it pressing "e"
+- The aimbot overlay can be disabled via the configuration
 - Enjoy :)
 
